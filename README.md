@@ -69,18 +69,26 @@ cd apple-notes-viewer
 
 ### 3. Place the export folder
 
-Move the exported folder into the `Notes/` directory inside the project:
+The `Notes/` directory already exists in the repo (it is tracked but its contents are gitignored — your notes never get committed).
+
+Move the exported folder from wherever Falcon saved it into `Notes/`:
 
 ```
-apple-notes-viewer/
+AppleNotes-Viewer/
 └── Notes/
-    └── On My Mac/       ← your exported folder goes here
+    └── On My Mac/       ← move your exported folder here
         ├── Note Title-DD-MM-YYYY.html
         ├── images/
         └── attachments/
 ```
 
-For multiple accounts, place each alongside the others:
+In Terminal:
+
+```bash
+mv ~/Desktop/"On My Mac" Notes/
+```
+
+For multiple accounts export each separately and place them alongside each other:
 
 ```
 Notes/

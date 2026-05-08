@@ -87,13 +87,23 @@ subdirectories.
 
 ### Step 3 — Place the export folder
 
-In Finder, navigate to the project root:
+The `Notes/` folder inside the project root is the container for all export data.
+It is tracked in git as an empty directory (via `.gitkeep`) but its contents are
+gitignored — your notes are never committed.
 
-```
-~/PlatformIO/Projects/AppleNotes/
+If `Notes/` is missing for any reason, create it:
+
+```bash
+mkdir ~/PlatformIO/Projects/AppleNotes/Notes
 ```
 
-Move the exported folder into the `Notes/` subfolder so the path is:
+Move the exported folder from wherever Falcon saved it into `Notes/`:
+
+```bash
+mv ~/Desktop/"On My Mac" ~/PlatformIO/Projects/AppleNotes/Notes/
+```
+
+The resulting path should be:
 
 ```
 ~/PlatformIO/Projects/AppleNotes/Notes/On My Mac/
@@ -103,7 +113,9 @@ If you have a second account (e.g. iCloud), export it separately and place that
 folder alongside the first:
 
 ```
-~/PlatformIO/Projects/AppleNotes/Notes/iCloud/
+Notes/
+├── On My Mac/
+└── iCloud/
 ```
 
 ### Step 4 — Launch
@@ -214,10 +226,14 @@ lsof -ti tcp:8765 | xargs kill -9
 
 ### Step 3 — Replace the export folder
 
-In Finder, navigate to `~/PlatformIO/Projects/AppleNotes/Notes/`.
+Delete the old account folder and move the new one into `Notes/`:
 
-Delete the old account folder (e.g. `On My Mac/`) and move the new one from wherever
-Falcon saved it so the path is:
+```bash
+rm -rf ~/PlatformIO/Projects/AppleNotes/Notes/"On My Mac"
+mv ~/Desktop/"On My Mac" ~/PlatformIO/Projects/AppleNotes/Notes/
+```
+
+The resulting path must be:
 
 ```
 ~/PlatformIO/Projects/AppleNotes/Notes/On My Mac/
@@ -225,6 +241,10 @@ Falcon saved it so the path is:
 
 The folder name must match exactly. If you are updating only one account, leave any
 other account folders (e.g. `iCloud/`) untouched.
+
+> The `Notes/` directory itself should always remain in place — only replace the
+> account subfolder(s) inside it. If `Notes/` is ever accidentally deleted, recreate
+> it with `mkdir ~/PlatformIO/Projects/AppleNotes/Notes` before relaunching.
 
 ### Step 4 — Relaunch
 

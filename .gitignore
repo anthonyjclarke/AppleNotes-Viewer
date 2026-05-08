@@ -1,5 +1,7 @@
 # Notes export data — never commit personal notes
-Notes/
+# The Notes/ directory itself is tracked (via .gitkeep); its contents are not
+Notes/*
+!Notes/.gitkeep
 
 # macOS
 .DS_Store
