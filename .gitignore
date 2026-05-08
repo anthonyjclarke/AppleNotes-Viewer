@@ -1,0 +1,14 @@
+# Notes export data — never commit personal notes
+Notes/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Claude Code internal
+.claude/launch.json
