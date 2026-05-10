@@ -11,6 +11,8 @@ Notes/*
 # Python
 __pycache__/
 *.py[cod]
+make_demo.py
 
 # Claude Code internal
 .claude/launch.json
+

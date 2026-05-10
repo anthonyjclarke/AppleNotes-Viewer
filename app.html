@@ -474,6 +474,14 @@
     .note-body li { margin: 3px 0; }
     .note-body a { color: var(--accent); text-decoration: none; }
     .note-body a:hover { text-decoration: underline; }
+    .note-body embed, .note-body object {
+      display: block;
+      width: 100%;
+      height: 600px;
+      border: none;
+      border-radius: var(--radius);
+      margin: 8px 0;
+    }
 
     /* ── Placeholder / empty states ───────────────────────────────── */
     .placeholder {
@@ -893,13 +901,23 @@ function renderNote(rawHtml, file) {
     img.removeAttribute("style"); // let our CSS control sizing
   });
 
-  // Rewrite attachment hrefs
+  // Rewrite attachment hrefs (<a> links)
   body.querySelectorAll("a[href]").forEach(a => {
     const href = a.getAttribute("href") || "";
     if (href.startsWith("attachments/")) {
       a.setAttribute("href", `/static/${folderPath}/${href}`);
       a.setAttribute("target", "_blank");
       a.setAttribute("rel", "noopener");
+    }
+  });
+
+  // Rewrite embedded attachments — Falcon uses <embed src> and sometimes <object data>
+  // for inline PDFs; neither is caught by the <a href> rewriter above
+  body.querySelectorAll("embed[src], object[data]").forEach(el => {
+    const attr = el.tagName === "OBJECT" ? "data" : "src";
+    const val  = el.getAttribute(attr) || "";
+    if (val.startsWith("attachments/")) {
+      el.setAttribute(attr, `/static/${folderPath}/${val}`);
     }
   });
 
