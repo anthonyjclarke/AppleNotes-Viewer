@@ -170,26 +170,95 @@
       border-radius: 8px; flex-shrink: 0;
     }
 
-    /* Tag items — reuse folder-item base, override icon */
-    .tag-icon {
-      font-size: 14px;
-      font-weight: 800;
-      color: var(--accent);
-      width: 20px;
-      text-align: center;
-      flex-shrink: 0;
-      line-height: 1;
-      font-family: -apple-system, BlinkMacSystemFont, monospace;
-    }
-    .folder-item.tag-item .folder-name {
-      font-weight: 400;
-    }
-
     /* Separator between folders and tags */
     .sidebar-divider {
       height: 1px;
       background: var(--divider);
       margin: 6px 14px;
+    }
+
+    /* ── Tag pill grid ────────────────────────────────────────────── */
+    .tag-grid {
+      padding: 4px 10px 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .tag-pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 5px 12px;
+      border-radius: 20px;
+      background: var(--bg-content);
+      border: 1px solid var(--border);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--tx-secondary);
+      cursor: pointer;
+      transition: background var(--trans), border-color var(--trans), color var(--trans);
+      user-select: none;
+      white-space: nowrap;
+      line-height: 1.3;
+    }
+    .tag-pill:hover {
+      background: var(--bg-hover);
+      border-color: var(--accent);
+      color: var(--tx-primary);
+    }
+    .tag-pill.active {
+      background: var(--bg-sel);
+      border-color: var(--accent);
+      color: var(--tx-primary);
+      font-weight: 600;
+    }
+    [data-theme="dark"] .tag-pill { background: var(--bg-list); }
+    [data-theme="dark"] .tag-pill:hover { background: var(--bg-hover); }
+
+    /* ── Startup loading overlay ──────────────────────────────────── */
+    .startup-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 9000;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-app);
+    }
+    .startup-overlay.open { display: flex; }
+    .startup-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      padding: 40px 48px;
+      background: var(--bg-content);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      min-width: 280px;
+    }
+    .startup-icon { font-size: 36px; line-height: 1; }
+    .startup-title {
+      font-size: 17px;
+      font-weight: 600;
+      color: var(--tx-primary);
+    }
+    .startup-bar-track {
+      width: 100%;
+      height: 5px;
+      background: var(--bg-search);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .startup-bar-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 3px;
+      width: 0%;
+      transition: width 0.25s ease;
+    }
+    .startup-label {
+      font-size: 13px;
+      color: var(--tx-secondary);
     }
 
     /* ── Note List Panel ──────────────────────────────────────────── */
@@ -543,19 +612,136 @@
       border-radius: 10px;
       box-shadow: 0 12px 60px rgba(0,0,0,0.6);
     }
+
+    /* ── Sync footer ──────────────────────────────────────────────── */
+    .sync-footer {
+      flex-shrink: 0;
+      padding: 8px 14px 12px;
+      border-top: 1px solid var(--divider);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .sync-status {
+      flex: 1;
+      font-size: 11px;
+      color: var(--tx-tertiary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .sync-btn {
+      flex-shrink: 0;
+      padding: 4px 10px;
+      border-radius: 7px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--tx-secondary);
+      font-size: 12px;
+      font-family: inherit;
+      cursor: pointer;
+      transition: border-color var(--trans), color var(--trans);
+    }
+    .sync-btn:hover  { border-color: var(--accent); color: var(--tx-primary); }
+    .sync-btn:disabled { opacity: 0.4; cursor: default; }
+
+    /* ── Settings gear button ─────────────────────────────────────── */
+    .settings-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 15px;
+      opacity: 0.5;
+      padding: 2px 4px;
+      border-radius: 5px;
+      transition: opacity var(--trans);
+      line-height: 1;
+    }
+    .settings-btn:hover { opacity: 1; }
+
+    /* ── PDF preview modal ────────────────────────────────────────── */
+    .pdf-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 3000;
+      flex-direction: column;
+      background: rgba(0,0,0,0.82);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+    }
+    .pdf-modal.open { display: flex; }
+    .pdf-modal-bar {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 10px 16px;
+      background: rgba(28,28,30,0.95);
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+    }
+    .pdf-modal-name {
+      flex: 1;
+      font-size: 13px;
+      font-weight: 500;
+      color: #F2F2F7;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .pdf-modal-tab {
+      font-size: 12px;
+      color: #FFCC00;
+      text-decoration: none;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .pdf-modal-tab:hover { text-decoration: underline; }
+    .pdf-modal-close {
+      background: none;
+      border: none;
+      color: #AEAEB2;
+      font-size: 20px;
+      cursor: pointer;
+      flex-shrink: 0;
+      line-height: 1;
+      padding: 0 2px;
+    }
+    .pdf-modal-close:hover { color: #F2F2F7; }
+    .pdf-modal-embed {
+      flex: 1;
+      width: 100%;
+      border: none;
+    }
   </style>
 </head>
 <body>
+
+<!-- ── Startup indexing overlay ──────────────────────────────────────── -->
+<div class="startup-overlay" id="startupOverlay">
+  <div class="startup-card">
+    <div class="startup-icon">📋</div>
+    <div class="startup-title">Loading Notes</div>
+    <div class="startup-bar-track">
+      <div class="startup-bar-fill" id="startupFill"></div>
+    </div>
+    <div class="startup-label" id="startupLabel">Starting…</div>
+  </div>
+</div>
+
 <div class="app">
 
   <!-- ── Sidebar ─────────────────────────────────────────────────── -->
   <aside class="sidebar">
     <div class="sidebar-top">
       <span class="sidebar-title">Notes</span>
-      <div class="toggle-wrap" id="themeToggleWrap" title="Toggle dark mode">
-        <span class="toggle-emoji" id="themeEmoji">☀️</span>
-        <div class="toggle-track" id="themeTrack">
-          <div class="toggle-thumb"></div>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <button class="settings-btn" id="settingsBtn" title="Settings">⚙️</button>
+        <div class="toggle-wrap" id="themeToggleWrap" title="Toggle dark mode">
+          <span class="toggle-emoji" id="themeEmoji">☀️</span>
+          <div class="toggle-track" id="themeTrack">
+            <div class="toggle-thumb"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -563,7 +749,15 @@
     <div class="folder-list" id="folderList">
       <!-- Populated by JS -->
     </div>
+
+    <div class="sync-footer">
+      <span class="sync-status" id="syncStatus">—</span>
+      <button class="sync-btn" id="syncBtn" title="Sync notes now">↻ Sync</button>
+    </div>
   </aside>
+
+  <!-- ── Sidebar ↔ List resize handle ─────────────────────────── -->
+  <div class="resize-handle" id="sidebarResizeHandle"></div>
 
   <!-- ── Note List ───────────────────────────────────────────────── -->
   <div class="list-panel">
@@ -602,6 +796,16 @@
 <!-- Lightbox -->
 <div class="lightbox" id="lightbox">
   <img id="lightboxImg" src="" alt="">
+</div>
+
+<!-- PDF preview modal -->
+<div class="pdf-modal" id="pdfModal">
+  <div class="pdf-modal-bar">
+    <span class="pdf-modal-name" id="pdfModalName"></span>
+    <a  class="pdf-modal-tab" id="pdfModalTab" href="" target="_blank" rel="noopener">Open in new tab ↗</a>
+    <button class="pdf-modal-close" id="pdfModalClose" title="Close">×</button>
+  </div>
+  <embed class="pdf-modal-embed" id="pdfModalEmbed" src="" type="application/pdf">
 </div>
 
 <script>
@@ -717,7 +921,7 @@ async function loadFolders() {
 
   document.getElementById("folderList").innerHTML = html;
 
-  document.querySelectorAll(".folder-item:not(.tag-item)").forEach(el => {
+  document.querySelectorAll(".folder-item").forEach(el => {
     el.addEventListener("click", () => {
       currentFolder = el.dataset.folder;
       currentTag    = null;
@@ -725,6 +929,9 @@ async function loadFolders() {
       searchAll     = false;
       document.getElementById("searchInput").value = "";
       document.querySelectorAll(".folder-item").forEach(e => e.classList.remove("active"));
+      document.querySelectorAll(".tag-pill").forEach(e =>
+        e.classList.toggle("active", e.dataset.tag === "")  // keep "All Tags" active
+      );
       el.classList.add("active");
       updateSearchAllPill();
       loadNoteList();
@@ -740,29 +947,44 @@ async function loadTags() {
 
   const container = document.getElementById("folderList");
 
+  const allActive = !currentTag ? " active" : "";
   let html = `<div class="sidebar-divider"></div>
-    <div class="folder-section-label">Tags</div>`;
+    <div class="folder-section-label">Tags</div>
+    <div class="tag-grid" id="tagGrid">
+      <div class="tag-pill${allActive}" data-tag="">All Tags</div>`;
 
-  for (const { tag, count } of tags) {
-    const name   = tag.slice(1);                          // strip leading #
+  for (const { tag } of tags) {
     const active = currentTag === tag ? " active" : "";
-    html += `<div class="folder-item tag-item${active}" data-tag="${esc(tag)}">
-      <span class="tag-icon">#</span>
-      <span class="folder-name">${esc(name)}</span>
-      <span class="folder-badge">${count}</span>
-    </div>`;
+    html += `<div class="tag-pill${active}" data-tag="${esc(tag)}">${esc(tag)}</div>`;
   }
+  html += `</div>`;
 
   container.insertAdjacentHTML("beforeend", html);
 
-  container.querySelectorAll(".tag-item").forEach(el => {
-    el.addEventListener("click", () => {
-      currentTag = el.dataset.tag;
-      searchQ    = currentTag;
-      searchAll  = false;           // tag search always uses __all__ internally
-      document.getElementById("searchInput").value = currentTag;
+  container.querySelectorAll(".tag-pill").forEach(pill => {
+    pill.addEventListener("click", () => {
+      const tag = pill.dataset.tag;
+      if (tag) {
+        currentTag = tag;
+        searchQ    = tag;
+        searchAll  = false;
+        document.getElementById("searchInput").value = tag;
+      } else {
+        // "All Tags" — clear tag filter, keep current folder
+        currentTag = null;
+        searchQ    = "";
+        searchAll  = false;
+        document.getElementById("searchInput").value = "";
+      }
       document.querySelectorAll(".folder-item").forEach(e => e.classList.remove("active"));
-      el.classList.add("active");
+      document.querySelectorAll(".tag-pill").forEach(e => e.classList.remove("active"));
+      pill.classList.add("active");
+      // Restore folder highlight if "All Tags" was clicked
+      if (!tag) {
+        document.querySelectorAll(".folder-item").forEach(e =>
+          e.classList.toggle("active", e.dataset.folder === currentFolder)
+        );
+      }
       updateSearchAllPill();
       loadNoteList();
     });
@@ -890,34 +1112,55 @@ function renderNote(rawHtml, file) {
   // Determine folder path for static URL rewriting
   const note = allNotes.find(n => n.file === file) || shownNotes.find(n => n.file === file) || {};
 
-  // Rewrite image src: images/UUID.png → /static/{folder}/images/UUID.png
-  // Per-segment encoding preserves "/" separators in multi-level folder paths
-  const folderPath = (note.folder || "").split("/").map(encodeURIComponent).join("/");
+  // Per-segment encoding preserves "/" separators while safely encoding special
+  // characters in folder/file names — including "#" (→ %23) which would otherwise
+  // be treated as a URL fragment delimiter by the browser and truncate the request.
+  const encRelPath = rel => rel.split("/").map(encodeURIComponent).join("/");
+  const folderPath = encRelPath(note.folder || "");
+
+  // Rewrite relative image src paths (base64 data: URIs are skipped by the regex)
   body.querySelectorAll("img[src]").forEach(img => {
     const src = img.getAttribute("src") || "";
-    if (src.startsWith("images/")) {
-      img.setAttribute("src", `/static/${folderPath}/${src}`);
+    if (src && !src.match(/^(https?:|data:|#|\/)/)) {
+      img.setAttribute("src", `/static/${folderPath}/${encRelPath(src)}`);
     }
     img.removeAttribute("style"); // let our CSS control sizing
   });
 
-  // Rewrite attachment hrefs (<a> links)
+  // Rewrite relative attachment hrefs — handles apple-notes-exporter format:
+  //   "2026-04-15 My Note (Attachments)/Document.pdf"
+  //   "2026-04-15 My Note #tag (Attachments)/Pasted Graphic.png"
   body.querySelectorAll("a[href]").forEach(a => {
     const href = a.getAttribute("href") || "";
-    if (href.startsWith("attachments/")) {
-      a.setAttribute("href", `/static/${folderPath}/${href}`);
-      a.setAttribute("target", "_blank");
-      a.setAttribute("rel", "noopener");
+    if (href && !href.match(/^(https?:|data:|#|\/)/)) {
+      const rewritten = `/static/${folderPath}/${encRelPath(href)}`;
+      a.setAttribute("href", rewritten);
+      if (href.toLowerCase().endsWith(".pdf")) {
+        // Mark <a> for the delegated PDF modal listener.
+        a.setAttribute("data-pdf-href", rewritten);
+        a.removeAttribute("target");   // prevent new-tab navigation
+        // apple-notes-exporter wraps the <a> in: flex-card > flex-1-div > <a>.
+        // Clicks on the emoji icon or "Scan File" text are siblings of <a>,
+        // not ancestors — so also mark the outer card div so the delegated
+        // closest("[data-pdf-href]") catches those clicks too.
+        const card = a.parentElement?.parentElement;
+        if (card && card !== body && card.style?.display === "flex") {
+          card.setAttribute("data-pdf-href", rewritten);
+          card.style.cursor = "pointer";
+        }
+      } else {
+        a.setAttribute("target", "_blank");
+        a.setAttribute("rel", "noopener");
+      }
     }
   });
 
-  // Rewrite embedded attachments — Falcon uses <embed src> and sometimes <object data>
-  // for inline PDFs; neither is caught by the <a href> rewriter above
+  // Same for <embed src> and <object data> (inline PDFs and media)
   body.querySelectorAll("embed[src], object[data]").forEach(el => {
     const attr = el.tagName === "OBJECT" ? "data" : "src";
     const val  = el.getAttribute(attr) || "";
-    if (val.startsWith("attachments/")) {
-      el.setAttribute(attr, `/static/${folderPath}/${val}`);
+    if (val && !val.match(/^(https?:|data:|#|\/)/)) {
+      el.setAttribute(attr, `/static/${folderPath}/${encRelPath(val)}`);
     }
   });
 
@@ -941,12 +1184,41 @@ function renderNote(rawHtml, file) {
       document.getElementById("lightbox").classList.add("open");
     });
   });
+
+  // PDF links are intercepted via the delegated listener on contentPanel (see below),
+  // which handles any click target inside the <a> and survives note reloads.
 }
 
 /* ── Lightbox ───────────────────────────────────────────────────────── */
 document.getElementById("lightbox").addEventListener("click", () =>
   document.getElementById("lightbox").classList.remove("open")
 );
+
+/* ── PDF modal ──────────────────────────────────────────────────────── */
+document.getElementById("pdfModalClose").addEventListener("click", () => {
+  document.getElementById("pdfModal").classList.remove("open");
+  document.getElementById("pdfModalEmbed").src = "";   // stop loading
+});
+document.getElementById("pdfModal").addEventListener("click", e => {
+  if (e.target === document.getElementById("pdfModal")) {
+    document.getElementById("pdfModal").classList.remove("open");
+    document.getElementById("pdfModalEmbed").src = "";
+  }
+});
+// PDF link interception — single delegated listener on the persistent contentPanel.
+// Handles clicks anywhere inside an attachment <a> (icon, text, card border, etc.)
+// without needing re-attachment on each note load.
+document.getElementById("contentPanel").addEventListener("click", e => {
+  const a = e.target.closest("[data-pdf-href]");
+  if (!a) return;
+  e.preventDefault();
+  const href = a.getAttribute("data-pdf-href");
+  const name = decodeURIComponent(href.split("/").pop());
+  document.getElementById("pdfModalEmbed").src = href;
+  document.getElementById("pdfModalTab").href  = href;
+  document.getElementById("pdfModalName").textContent = name;
+  document.getElementById("pdfModal").classList.add("open");
+});
 
 /* ── Search ─────────────────────────────────────────────────────────── */
 const searchInput = document.getElementById("searchInput");
@@ -969,9 +1241,12 @@ function clearSearch() {
   searchQ    = "";
   currentTag = null;
   searchAll  = false;
-  // Restore active state on current folder
+  // Restore active state on current folder; clear all tag pills
   document.querySelectorAll(".folder-item").forEach(e =>
-    e.classList.toggle("active", !e.classList.contains("tag-item") && e.dataset.folder === currentFolder)
+    e.classList.toggle("active", e.dataset.folder === currentFolder)
+  );
+  document.querySelectorAll(".tag-pill").forEach(e =>
+    e.classList.toggle("active", e.dataset.tag === "")  // "All Tags" pill
   );
   updateSearchAllPill();
   loadNoteList();
@@ -979,14 +1254,20 @@ function clearSearch() {
 
 /* ── Keyboard shortcuts ─────────────────────────────────────────────── */
 document.addEventListener("keydown", e => {
-  // Escape: close lightbox or clear search/tag
+  // Escape: close PDF modal, then lightbox, then search
   if (e.key === "Escape") {
+    const pdf = document.getElementById("pdfModal");
+    if (pdf.classList.contains("open")) {
+      pdf.classList.remove("open");
+      document.getElementById("pdfModalEmbed").src = "";
+      return;
+    }
     const lb = document.getElementById("lightbox");
     if (lb.classList.contains("open")) {
       lb.classList.remove("open");
-    } else if (searchInput.value || currentTag) {
-      clearSearch();
+      return;
     }
+    if (searchInput.value || currentTag) clearSearch();
     return;
   }
 
@@ -1010,54 +1291,154 @@ document.addEventListener("keydown", e => {
   }
 });
 
+/* ── Settings button ────────────────────────────────────────────────── */
+document.getElementById("settingsBtn").addEventListener("click", () => {
+  window.location.href = "/settings";
+});
+
+/* ── Sync ───────────────────────────────────────────────────────────── */
+async function loadSyncStatus() {
+  try {
+    const r = await fetch("/api/sync");
+    const d = await r.json();
+    const el = document.getElementById("syncStatus");
+    if (!d.last_synced) { el.textContent = "Not yet synced"; return; }
+    const diff = Math.round((Date.now() - new Date(d.last_synced)) / 60000);
+    el.textContent = diff < 1   ? "Synced just now"
+      : diff < 60  ? `Synced ${diff}m ago`
+      : `Synced ${Math.round(diff / 60)}h ago`;
+  } catch { /* silent — sync not configured */ }
+}
+
+async function pollIndexProgress(btn, sta) {
+  return new Promise(resolve => {
+    function poll() {
+      fetch("/api/index-status").then(r => r.json()).then(d => {
+        if (d.active) {
+          if (d.total > 0) btn.textContent = "↻ " + Math.round(d.done / d.total * 100) + "%";
+          setTimeout(poll, 300);
+        } else {
+          sta.textContent = "Synced just now";
+          btn.disabled = false;
+          btn.textContent = "↻ Sync";
+          loadFolders().then(loadTags).then(() => {
+            updateSearchAllPill(); loadNoteList();
+          }).then(resolve);
+        }
+      }).catch(() => setTimeout(poll, 500));
+    }
+    poll();
+  });
+}
+
+document.getElementById("syncBtn").addEventListener("click", async () => {
+  const btn = document.getElementById("syncBtn");
+  const sta = document.getElementById("syncStatus");
+  btn.disabled = true;
+  btn.textContent = "↻ Syncing…";
+  try {
+    // Phase 1: sync.sh runs synchronously server-side (fast for incremental)
+    const r = await fetch("/api/sync", { method: "POST" });
+    const d = await r.json();
+    if (d.status === "indexing") {
+      // Phase 2: indexing is async — poll for progress
+      btn.textContent = "↻ 0%";
+      await pollIndexProgress(btn, sta);
+    } else if (d.status === "ok") {
+      sta.textContent = "Synced just now";
+      await loadFolders(); await loadTags();
+      updateSearchAllPill(); await loadNoteList();
+      btn.disabled = false; btn.textContent = "↻ Sync";
+    } else {
+      alert("Sync failed: " + (d.message || "unknown error"));
+      btn.disabled = false; btn.textContent = "↻ Sync";
+    }
+  } catch (e) {
+    alert("Sync error: " + e.message);
+    btn.disabled = false; btn.textContent = "↻ Sync";
+  }
+});
+
+/* ── Startup index wait ─────────────────────────────────────────────── */
+async function waitForStartupIndex() {
+  return new Promise(resolve => {
+    const overlay = document.getElementById("startupOverlay");
+    const fill    = document.getElementById("startupFill");
+    const label   = document.getElementById("startupLabel");
+    overlay.classList.add("open");
+
+    function poll() {
+      fetch("/api/index-status").then(r => r.json()).then(d => {
+        if (d.active) {
+          const pct = d.total > 0 ? Math.round(d.done / d.total * 100) : 0;
+          fill.style.width = pct + "%";
+          label.textContent = d.total > 0
+            ? `${d.done.toLocaleString()} of ${d.total.toLocaleString()} notes…`
+            : "Starting…";
+          setTimeout(poll, 300);
+        } else {
+          fill.style.width = "100%";
+          label.textContent = `✓ ${d.count.toLocaleString()} notes ready`;
+          setTimeout(() => { overlay.classList.remove("open"); resolve(); }, 500);
+        }
+      }).catch(() => setTimeout(poll, 500));
+    }
+    poll();
+  });
+}
+
 /* ── Init ───────────────────────────────────────────────────────────── */
 async function init() {
+  // If the server is mid-index (async startup), show loading overlay first
+  try {
+    const st = await fetch("/api/index-status").then(r => r.json());
+    if (st.active) await waitForStartupIndex();
+  } catch { /* server not ready yet — proceed anyway */ }
+
   await loadFolders();
   await loadTags();
   updateSearchAllPill();
   await loadNoteList();
+  loadSyncStatus();   // fire-and-forget
 }
 
 init();
 
-/* ── Resizable list panel ───────────────────────────────────────────── */
+/* ── Resizable panels ───────────────────────────────────────────────── */
 (function () {
-  const handle = document.getElementById("listResizeHandle");
-  const root   = document.documentElement;
-  const MIN_W  = 180;
-  const MAX_W  = 700;
-  const KEY    = "notes-list-w";
+  function makeResizable(handleId, cssVar, minW, maxW, storageKey) {
+    const handle = document.getElementById(handleId);
+    const root   = document.documentElement;
+    const saved  = parseInt(localStorage.getItem(storageKey), 10);
+    if (saved >= minW && saved <= maxW) root.style.setProperty(cssVar, saved + "px");
 
-  const saved = parseInt(localStorage.getItem(KEY), 10);
-  if (saved >= MIN_W && saved <= MAX_W) {
-    root.style.setProperty("--list-w", saved + "px");
+    handle.addEventListener("mousedown", e => {
+      e.preventDefault();
+      const startX = e.clientX;
+      const startW = parseInt(getComputedStyle(root).getPropertyValue(cssVar), 10);
+      handle.classList.add("dragging");
+      document.body.style.cursor     = "col-resize";
+      document.body.style.userSelect = "none";
+
+      function onMove(e) {
+        const w = Math.min(maxW, Math.max(minW, startW + e.clientX - startX));
+        root.style.setProperty(cssVar, w + "px");
+      }
+      function onUp() {
+        handle.classList.remove("dragging");
+        document.body.style.cursor     = "";
+        document.body.style.userSelect = "";
+        localStorage.setItem(storageKey, parseInt(getComputedStyle(root).getPropertyValue(cssVar), 10));
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup",   onUp);
+      }
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup",   onUp);
+    });
   }
 
-  handle.addEventListener("mousedown", e => {
-    e.preventDefault();
-    const startX = e.clientX;
-    const startW = parseInt(getComputedStyle(root).getPropertyValue("--list-w"), 10);
-    handle.classList.add("dragging");
-    document.body.style.cursor    = "col-resize";
-    document.body.style.userSelect = "none";
-
-    function onMove(e) {
-      const w = Math.min(MAX_W, Math.max(MIN_W, startW + e.clientX - startX));
-      root.style.setProperty("--list-w", w + "px");
-    }
-
-    function onUp() {
-      handle.classList.remove("dragging");
-      document.body.style.cursor    = "";
-      document.body.style.userSelect = "";
-      localStorage.setItem(KEY, parseInt(getComputedStyle(root).getPropertyValue("--list-w"), 10));
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup",   onUp);
-    }
-
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup",   onUp);
-  });
+  makeResizable("sidebarResizeHandle", "--sidebar-w", 150, 400, "notes-sidebar-w");
+  makeResizable("listResizeHandle",    "--list-w",    180, 700, "notes-list-w");
 })();
 </script>
 </body>

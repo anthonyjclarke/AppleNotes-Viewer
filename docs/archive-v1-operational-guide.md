@@ -1,4 +1,15 @@
-# Notes Viewer — Operational Guide
+# Notes Viewer — Operational Guide (v1 Archive)
+
+> **ARCHIVED — v1.0 only. This document does not apply to v2.0.**
+>
+> v2.0 is a complete rewrite built around [`apple-notes-exporter`](https://github.com/nicholasstephan/apple-notes-exporter).
+> The folder layout, setup workflow, sync process, and architecture described below
+> are all superseded. Refer to [README.md](../README.md) for setup and
+> [CLAUDE.md](../CLAUDE.md) for architecture.
+>
+> This file is retained as a reference for the v1.0 Falcon Notes Exporter-based release.
+
+---
 
 A local web application for browsing and searching Apple Notes exports produced by
 [Falcon Notes Exporter](https://falcon.star-lord.me/exporter). Runs entirely on your Mac —

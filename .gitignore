@@ -13,6 +13,9 @@ __pycache__/
 *.py[cod]
 make_demo.py
 
+# User configuration — contains local paths, never commit
+config.json
+
 # Claude Code internal
 .claude/launch.json
 

@@ -2,121 +2,240 @@
 
 ## Context
 
-The current app relies on the Falcon web exporter (https://falcon.star-lord.me/exporter), a manual browser-based tool. The user must visit the site, export, and copy files — a multi-step process that doesn't easily unify iCloud and On My Mac notes together.
+The current app uses Falcon Notes Exporter (a manual browser-based tool). This plan replaces
+it entirely with **apple-notes-exporter** (https://github.com/kzaremski/apple-notes-exporter),
+a Swift CLI that reads Apple Notes' local SQLite database directly — both iCloud and On My Mac
+accounts in a single command. v2.0 released April 28 2026; actively maintained.
 
-**apple-notes-exporter** (https://github.com/kzaremski/apple-notes-exporter) is a Swift CLI that reads the Apple Notes local SQLite database directly — both iCloud and On My Mac accounts in a single command. Its `--incremental` flag tracks changes via a manifest, making re-syncs fast. v2.0 was released April 28 2026; 484 stars, actively maintained.
+**Goal:** Drive sync from a `sync.sh` script (and a "Sync Now" button in the UI). No
+backward-compatibility with old Falcon exports is required — this is a clean cutover.
 
-**Goal:** Replace the manual Falcon workflow with a CLI-driven `sync.sh` that keeps Notes/ current automatically, and add a "Sync Now" button to the UI. Maintain backward compatibility with existing Falcon-exported notes.
+The implementation is split into two phases:
 
----
-
-## What Changes and Why
-
-### Format differences to handle
-
-| Concern | Falcon | apple-notes-exporter | Action required |
-|:---|:---|:---|:---|
-| Images | `images/UUID.jpg` (relative file) | `data:image/...;base64,...` (inline) | No action — base64 URIs don't match `startsWith("images/")` rewriter; safely ignored |
-| Attachments | `attachments/UUID.pdf` | `{NoteTitle}/attachment.pdf` | Broaden rewriter from `attachments/` prefix to any relative path |
-| Filenames | `{Title}-DD-MM-YYYY.html` | `{Title}.html` | No action — title already extracted from `<title>` tag |
-| Folder depth | `{Account}/{Folder}/{Note}.html` (depth 3) | `{Account}/{Folder}/{Note}.html` (depth 3) | Compatible — same structure |
-| Asset subdirs | `images/`, `attachments/` | No `images/`; `{NoteTitle}/` for attachments | Depth filter replaces dir-name exclusion |
-
-### File identity issue (existing bug, fix here)
-
-`server.py:198` looks up notes by bare filename: `n["file"] == fname`. Two notes named `Shopping List.html` in different folders would collide. Fix: store `file` as a NOTES_ROOT-relative path (e.g., `iCloud/Personal/Shopping List.html`). This is also used in `app.html` as `data-file` on list items and in `openNote(file)` — updating the stored value propagates correctly with no other logic changes needed.
+- **Phase 1** — Python app: config-driven Notes folder, browser settings page, sync UI
+- **Phase 2** — Native .app: Swift wrapper with WKWebView, replacing the browser launch
 
 ---
 
-## Known Unknowns (validate before full implementation)
+## What the Real Export Looks Like
 
-These must be verified against a real apple-notes-exporter export:
+Export was validated against `Notes-New/` using default apple-notes-exporter settings
+(HTML format, date prefix `yyyy-MM-dd`).
 
-1. **mtime preservation** — does the CLI set each file's mtime to the note's last-edit date (like Falcon), or to export time? If export time, date sorting will be wrong and an alternative date source is needed (manifest.json, or a `<meta>` tag in the HTML).
-2. **Attachment path format** — inspect the actual `<a href>` and `<embed src>` values inside an exported HTML file for a note with a PDF attachment. The broadened rewriter must match exactly.
-3. **Account directory names** — what does apple-notes-exporter call the account dirs? ("iCloud", "On My Mac", or email address?) Affects README examples.
-4. **Incremental delete handling** — does `--incremental` remove HTML files for notes deleted from Apple Notes, or only add/update? If not, stale notes accumulate until a full re-export.
+### Folder structure (Apple Notes folders ARE preserved)
 
-**Validation step:** Before writing any sync UI, run `notes-export export --format html --output /tmp/test-export` on a real Notes database and inspect the output structure.
+```
+{Notes Root}/
+├── iCloud/
+│   ├── Notes/                             ← 1,602 notes
+│   │   ├── 2026-04-15 My Note.html
+│   │   ├── 2026-04-15 My Note (Attachments)/
+│   │   │   └── Document.pdf
+│   │   └── …
+│   └── Recently Deleted/                  ← 91 notes (excluded by default)
+│       └── …
+└── On My Mac/
+    └── Archived/                          ← 980 notes
+        └── …
+```
+
+Each Apple Notes folder becomes a subdirectory under its account name. The depth is always
+`{Account}/{Folder}/{Note}.html` — confirmed depth 3 from the Notes root. Attachment
+subdirectories (`{yyyy-MM-dd} {Title} (Attachments)/`) are at depth 4 and are correctly
+excluded by the depth filter.
+
+### Format details confirmed
+
+| Item                  | Format                                                                 |
+|:----------------------|:-----------------------------------------------------------------------|
+| Filename              | `{yyyy-MM-dd} {Title}.html`                                            |
+| Attachment folder     | `{yyyy-MM-dd} {Title} (Attachments)/`                                  |
+| Attachment types      | PDF, PNG, JPEG, TIFF, HEIC (all relative `href`/`src` paths)           |
+| Images in note body   | `data:image/...;base64,...` inline — no path rewriting needed          |
+| Date meta tags        | `<meta name="modified" content="D Mon YYYY at H:MM am/pm">`            |
+| mtime                 | Set to note's last-edit date — confirmed accurate (50-note spot-check) |
+
+### "Recently Deleted" folder
+
+The export includes a "Recently Deleted" Apple Notes folder. Default behaviour: exclude it
+from the index (add a `_SKIP_FOLDERS` set in `server.py`). This can be made configurable
+via the settings page later.
 
 ---
 
-## Implementation
+## Known Limitations
 
-### Step 1 — `server.py`: file identity fix + depth filter + threading
+### 01-01-2001 epoch dates (≈23% of notes)
 
-**Files:** `server.py`
+414 of 1,758 iCloud notes had `<meta name="modified" content="1 Jan 2001…">` and mtime of
+1 January 2001. This is genuine data from Apple Notes' SQLite database — these notes have no
+valid date recorded (common for very old, imported, or migrated notes). They sort to the
+bottom of the list. This is not a bug — it reflects what Apple Notes itself stores. A future
+enhancement could group them in an "Undated" section.
 
-**Changes:**
+---
 
-1. Import `threading` and `subprocess`. Change `HTTPServer` → `ThreadingHTTPServer` (prevents the /api/sync endpoint from blocking the UI during a long sync).
+## Known Unknowns
 
-2. In `build_index()` at line 125, change `"file"` to store relative path:
+| Unknown                     | Status                                                                 |
+|:----------------------------|:-----------------------------------------------------------------------|
+| mtime preservation          | ✅ RESOLVED — matches note's last-edit date                            |
+| Attachment path format      | ✅ RESOLVED — `{yyyy-MM-dd} {Title} (Attachments)/{filename}`          |
+| Account directory names     | ✅ RESOLVED — `iCloud`, `On My Mac`                                    |
+| Apple Notes folder hierarchy | ✅ RESOLVED — preserved; each folder is a subdirectory under account  |
+| Incremental delete handling | ⚠️ UNKNOWN — does `--incremental` remove HTML for deleted notes?      |
+| manifest.json generation    | ⚠️ UNKNOWN — not present in initial export; may appear on second run  |
+
+---
+
+## Phase 1 — Python App
+
+### Step 1 — `config.json` and NOTES_ROOT
+
+**Problem:** The Notes folder will live in the user's Documents folder (for backup), not next
+to the app. NOTES_ROOT must be configurable.
+
+**Config file:** `config.json` alongside `server.py`:
+```json
+{
+  "notes_root": "/Users/ant/Documents/AppleNotes"
+}
+```
+
+`server.py` reads this on startup:
+```python
+import json
+_CONFIG_FILE = BASE_DIR / "config.json"
+
+def load_config() -> dict:
+    if _CONFIG_FILE.exists():
+        return json.loads(_CONFIG_FILE.read_text())
+    return {}
+
+config = load_config()
+NOTES_ROOT = Path(config["notes_root"]) if config.get("notes_root") else None
+```
+
+If `NOTES_ROOT` is `None` (no config), the server starts but serves only the `/settings`
+page — all other routes redirect to `/settings`.
+
+### Step 2 — `/settings` page in `server.py`
+
+Add a `/settings` route that serves an HTML page (styled to match the app) with:
+- A text field pre-populated with the current `notes_root` value
+- A **Save** button that POSTs to `/settings` and writes `config.json`
+- After save: redirect to `/` and trigger a re-index
+
+Also add a settings link/icon in the `app.html` sidebar so the user can return to it.
+
+The `/settings` page is also the landing page shown on first run when no config exists.
+
+**`GET /settings`** — serve settings HTML  
+**`POST /settings`** — body: `{"notes_root": "/path/to/folder"}` — validates path exists,
+writes `config.json`, calls `_rebuild()`, returns `{"status": "ok"}` or `{"status": "error"}`
+
+### Step 3 — `server.py`: depth filter + exclusions + threading + meta date
+
+1. **Import** `threading`, `subprocess`. Switch `HTTPServer` → `ThreadingHTTPServer`.
+
+2. **Skip folders:**
    ```python
-   # Before:
-   "file": html_file.name,
-   # After:
-   "file": "/".join(parts),   # e.g. "iCloud/Personal/Shopping List.html"
+   _SKIP_FOLDERS = {"Recently Deleted"}   # configurable via settings later
+   ```
+   In `build_index()`, after computing `parts`:
+   ```python
+   if len(parts) != 3:
+       continue
+   if parts[1] in _SKIP_FOLDERS:
+       continue
+   ```
+   This replaces the old `_ASSET_DIRS` name check — no longer needed.
+
+3. **File identity:** store `file` as NOTES_ROOT-relative path:
+   ```python
+   "file": "/".join(parts),   # e.g. "iCloud/Notes/2026-04-15 My Note.html"
    ```
 
-3. In `build_index()` at line 96, replace the `_ASSET_DIRS` check with a depth filter:
+4. **Date source — `<meta name="modified">` with mtime fallback:**
    ```python
-   # Before:
-   if any(p in _ASSET_DIRS for p in parts[:-1]):
-       continue
-   # After:
-   if len(parts) != 3:   # only index {Account}/{Folder}/{Note}.html
-       continue
-   ```
-   Remove `_ASSET_DIRS` constant (line 23) — no longer needed.
+   # In NoteParser.__init__:
+   self.modified = ""
 
-4. Add global state dict protected by a lock, replacing the module-level globals:
+   # In NoteParser.handle_starttag:
+   if tag == "meta":
+       attr_d = dict(attrs)
+       if attr_d.get("name") == "modified":
+           self.modified = attr_d.get("content", "")
+
+   # In build_index():
+   date = None
+   if p.modified:
+       try:
+           date = datetime.strptime(p.modified, "%d %b %Y at %I:%M %p")
+       except ValueError:
+           pass
+   if date is None:
+       date = datetime.fromtimestamp(html_file.stat().st_mtime)
+   ```
+   The meta tag survives file copies and rsync; mtime is the fallback for notes without it.
+
+5. **NoteParser filename fallback** — the date-prefix regex should match `yyyy-MM-dd` format:
+   ```python
+   # Strip leading "YYYY-MM-DD " from filename when <title> tag is absent
+   import re
+   stem = re.sub(r"^\d{4}-\d{2}-\d{2} ", "", html_file.stem)
+   ```
+
+6. **Threaded state:**
    ```python
    _lock = threading.Lock()
    _state: dict = {}
    ```
-   Move `ALL_NOTES`, `CLIENT_INDEX`, `FOLDERS`, `TAGS` into `_state` via a `_rebuild()` helper. Swap atomically under the lock on each rebuild. All route handlers read from `_state` under the lock.
+   Move `ALL_NOTES`, `CLIENT_INDEX`, `FOLDERS`, `TAGS` into `_state`. Swap atomically under
+   the lock inside a `_rebuild()` helper. All route handlers read from `_state` under the lock.
 
-5. Add `/api/sync` endpoint:
-   - `GET /api/sync` → returns `{"last_synced": isostr_or_null, "count": int}`
-   - `POST /api/sync` → runs `bash sync.sh` (timeout 300s), calls `_rebuild()`, returns `{"status": "ok", "count": int}` or `{"status": "error", "message": str}`
+7. **`/api/sync` endpoint:**
+   - `GET` → `{"last_synced": isostr_or_null, "count": int}`
+   - `POST` → runs `bash sync.sh` (timeout 300 s), calls `_rebuild()`, returns
+     `{"status": "ok", "count": int}` or `{"status": "error", "message": str}`
 
-6. Update `do_GET` at line 198 — the `n["file"] == fname` lookup now works correctly since both sides use the relative path.
-
-### Step 2 — `sync.sh` (new file)
+### Step 4 — `sync.sh` (new file)
 
 ```sh
 #!/bin/bash
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BINARY="${NOTES_EXPORT_BIN:-notes-export}"
+CONFIG="$SCRIPT_DIR/config.json"
 
 if ! command -v "$BINARY" &>/dev/null; then
   echo "ERROR: 'notes-export' not found in PATH." >&2
-  echo "  Set NOTES_EXPORT_BIN=/path/to/notes-export or add it to /usr/local/bin/" >&2
+  echo "  Set NOTES_EXPORT_BIN=/path/to/notes-export or add to /usr/local/bin/" >&2
   exit 1
 fi
+
+NOTES_ROOT=$(python3 -c "import json,sys; print(json.load(open('$CONFIG'))['notes_root'])")
 
 "$BINARY" export \
   --format html \
   --incremental \
-  --output "$SCRIPT_DIR/Notes"
+  --output "$NOTES_ROOT"
 ```
 
-Incremental flag uses apple-notes-exporter's `manifest.json` (written inside Notes/). First run is a full export; subsequent runs only process changed notes — typically seconds.
+> **Note on `--incremental`:** This flag is added explicitly for performance — it is not a
+> default apple-notes-exporter option. On the first run it performs a full export. On
+> subsequent runs it only processes changed notes. Whether a `manifest.json` tracking file
+> is written is not yet confirmed; the flag is safe to pass regardless.
 
-`Notes/manifest.json` is already excluded by the existing `Notes/*` gitignore rule.
+### Step 5 — `app.html`: attachment rewriter + sync UI + settings link
 
-### Step 3 — `app.html`: attachment rewriter + sync UI
-
-**Attachment rewriter** (around line 905–922):
-
-The current rewriter only handles `attachments/` prefix. Broaden to any relative path (matches both Falcon and apple-notes-exporter):
+**Attachment rewriter** — broaden from `attachments/` prefix to any relative path, covering
+all attachment types (PDF, PNG, JPEG, TIFF, HEIC):
 
 ```javascript
-// Rewrite attachment hrefs — handles both:
-//   Falcon:  attachments/UUID.pdf
-//   apple-notes-exporter: {NoteTitle}/filename.pdf
+// Rewrite relative attachment hrefs — apple-notes-exporter format:
+// "2026-04-15 My Note (Attachments)/Document.pdf"
+// "2026-04-15 My Note (Attachments)/Pasted Graphic.png"
 body.querySelectorAll("a[href]").forEach(a => {
   const href = a.getAttribute("href") || "";
   if (href && !href.match(/^(https?:|data:|#|\/)/)) {
@@ -125,7 +244,6 @@ body.querySelectorAll("a[href]").forEach(a => {
     a.setAttribute("rel", "noopener");
   }
 });
-// Same pattern for embed[src] and object[data]
 body.querySelectorAll("embed[src], object[data]").forEach(el => {
   const attr = el.tagName === "OBJECT" ? "data" : "src";
   const val  = el.getAttribute(attr) || "";
@@ -135,8 +253,7 @@ body.querySelectorAll("embed[src], object[data]").forEach(el => {
 });
 ```
 
-**Sync UI** — add to sidebar HTML (below folder list, before `</aside>`):
-
+**Sync UI** — add to sidebar (below folder list, before `</aside>`):
 ```html
 <div class="sync-footer" id="syncFooter">
   <span class="sync-status" id="syncStatus">—</span>
@@ -144,29 +261,9 @@ body.querySelectorAll("embed[src], object[data]").forEach(el => {
 </div>
 ```
 
-CSS additions (inside `<style>`):
-```css
-.sync-footer {
-  flex-shrink: 0;
-  padding: 8px 14px 12px;
-  border-top: 1px solid var(--divider);
-  display: flex; align-items: center; gap: 8px;
-}
-.sync-status {
-  flex: 1; font-size: 11px; color: var(--tx-tertiary);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.sync-btn {
-  flex-shrink: 0; padding: 4px 10px; border-radius: 7px;
-  border: 1px solid var(--border); background: transparent;
-  color: var(--tx-secondary); font-size: 12px; font-family: inherit;
-  cursor: pointer; transition: all var(--trans);
-}
-.sync-btn:hover { border-color: var(--accent); color: var(--tx-primary); }
-.sync-btn:disabled { opacity: 0.4; cursor: default; }
-```
+**Settings link** — add a gear icon/link in the sidebar header that navigates to `/settings`.
 
-JS (add before `init()`):
+**Sync JS** (add before `init()`):
 ```javascript
 async function loadSyncStatus() {
   try {
@@ -178,7 +275,7 @@ async function loadSyncStatus() {
     el.textContent = diff < 1 ? "Synced just now"
       : diff < 60 ? `Synced ${diff}m ago`
       : `Synced ${Math.round(diff/60)}h ago`;
-  } catch { /* server may not support sync — silently hide status */ }
+  } catch { /* sync not yet configured */ }
 }
 
 document.getElementById("syncBtn").addEventListener("click", async () => {
@@ -199,59 +296,139 @@ document.getElementById("syncBtn").addEventListener("click", async () => {
 });
 ```
 
-Add `loadSyncStatus()` call inside `init()` (non-blocking, fire-and-forget):
-```javascript
-async function init() {
-  await loadFolders();
-  await loadTags();
-  updateSearchAllPill();
-  await loadNoteList();
-  loadSyncStatus();   // ← add
-}
-```
+Add `loadSyncStatus()` (fire-and-forget) at the end of `init()`.
 
-### Step 4 — `Launch Notes.command`: optional auto-sync
-
-Existing launcher kills port 8765, starts server, opens browser. Add optional pre-launch sync:
+### Step 6 — `Launch Notes.command`: optional auto-sync
 
 ```bash
-# Before starting server, optionally run sync (set AUTO_SYNC=1 or pass --sync arg)
 if [[ "${1:-}" == "--sync" ]] || [[ "${AUTO_SYNC:-}" == "1" ]]; then
   echo "Syncing notes…"
   bash sync.sh || echo "⚠ Sync failed — launching with existing notes"
 fi
 ```
 
-### Step 5 — Documentation
+### Step 7 — Documentation
 
-**README.md:**
-- Replace Falcon as primary workflow with apple-notes-exporter
-- New "Requirements" section: download `notes-export` binary from GitHub Releases, place in `/usr/local/bin/`, grant Full Disk Access in System Settings > Privacy & Security
-- Replace "Export from Falcon" steps with `bash sync.sh` (or UI Sync button)
-- Add "Backward compatibility" note: existing Falcon exports in Notes/ continue to work
-- Document `AUTO_SYNC=1` env var for the launcher
+**README.md:** Replace Falcon workflow. Requirements: download `notes-export` binary, place in
+`/usr/local/bin/`, grant Full Disk Access in System Settings > Privacy & Security. Setup:
+run app → browser opens `/settings` → enter Notes folder path → run `bash sync.sh`. Document
+`AUTO_SYNC=1` env var and "Recently Deleted" exclusion behaviour.
 
-**NOTES_VIEWER.md:**
-- Update folder layout diagram to show apple-notes-exporter output structure
-- Add `/api/sync` to the technical reference table
-- Add "Full Disk Access" troubleshooting entry
+**NOTES_VIEWER.md:** Update folder layout diagram to show `{Account}/{Folder}/{Note}.html`
+structure with the confirmed account/folder names. Add `/api/sync` and `/settings` to the
+technical reference. Add "Full Disk Access" troubleshooting entry.
 
 ---
 
-## Verification
+## Phase 2 — Native .app Wrapper
 
-1. Install `notes-export` binary and grant Full Disk Access
-2. Run `bash sync.sh` — confirm Notes/ fills with `{Account}/{Folder}/{Note}.html` files
-3. Start server and open http://127.0.0.1:8765 — confirm notes appear in sidebar
-4. Open a note with an image — confirm image renders (base64 inline, no path rewriting)
-5. Open a note with a PDF attachment — confirm PDF link opens (broadened rewriter)
-6. Click "Sync Now" in UI — confirm spinner, POST to `/api/sync`, note list refreshes
-7. Test with existing Falcon-exported Notes/ — confirm depth-3 notes still indexed
+A minimal Swift app that hosts the existing web UI in a `WKWebView` window. No browser
+required. The Python server runs as a background subprocess.
+
+### Architecture
+
+```
+AppleNotesViewer.app/
+├── Contents/
+│   ├── MacOS/
+│   │   └── AppleNotesViewer        ← Swift binary
+│   ├── Resources/
+│   │   ├── server.py               ← bundled alongside
+│   │   └── AppIcon.icns
+│   └── Info.plist
+```
+
+The Swift app:
+1. Locates `server.py` inside the bundle's `Resources/`
+2. Launches `python3 server.py` as a `Process()` subprocess
+3. Opens a `WKWebView` window loading `http://127.0.0.1:8765`
+4. Terminates the subprocess on quit
+
+### Configuration in Phase 2
+
+Config moves from `config.json` (next to server.py) to:
+```
+~/Library/Application Support/AppleNotesViewer/config.json
+```
+
+`server.py` searches both locations (bundle Resources first, then `~/Library/...`), so the
+same server.py works in Phase 1 (next to the file) and Phase 2 (in the bundle).
+
+### Menu bar actions
+
+| Menu item                  | Action                                                         |
+|:---------------------------|:---------------------------------------------------------------|
+| File > Sync Now            | POST to `/api/sync`, reload WKWebView on completion            |
+| AppleNotesViewer > Preferences… | Load `/settings` in the WKWebView                        |
+| AppleNotesViewer > Quit    | Terminate subprocess, exit app                                 |
+
+### Native folder picker in Settings
+
+The `/settings` page has a "Choose Folder…" button. In Phase 1 this is a plain text input.
+In Phase 2, the button sends a JavaScript message to Swift via `WKScriptMessageHandler`:
+
+```javascript
+// In settings page JS:
+window.webkit.messageHandlers.chooseFolderBtn.postMessage({});
+```
+
+Swift handler shows `NSOpenPanel` (canChooseDirectories: true), then injects the result back:
+
+```swift
+webView.evaluateJavaScript("document.getElementById('notesRootInput').value = '\(selectedPath)'")
+```
+
+The user then clicks Save as normal — the Python server writes config and re-indexes.
+
+### Code signing
+
+For local/personal use: ad-hoc signing (`codesign --sign -`). For sharing: sign with an
+Apple Developer ID (free account sufficient for direct distribution, no App Store).
+
+### Implementation steps for Phase 2
+
+1. Create Xcode project (macOS App, Swift, AppKit, no SwiftUI)
+2. `AppDelegate.swift` — start/stop subprocess, create `NSWindow` with `WKWebView`
+3. Add menu items wired to `AppDelegate` actions
+4. Copy `server.py` into bundle Resources via a Copy Files build phase
+5. Implement `WKScriptMessageHandler` for folder picker
+6. Add app icon (`AppIcon.icns`)
+7. Update `config.json` path resolution in `server.py` to check both locations
+8. Ad-hoc sign and test
+
+---
+
+## Performance Note
+
+Notes with inline base64 images can be 1–6 MB each. `build_index()` currently loads each
+file in full. For 2,600+ notes this is manageable at startup but wasteful for large files.
+
+Future optimisation: read only the first 8 KB per file to extract `<title>` and `<meta>` tags
+(both are in `<head>`, well within this range), then cap the body read for the search snippet.
+Not a blocker for Phase 1.
+
+---
+
+## Phase 1 Verification
+
+1. Run app with no `config.json` → browser opens `/settings` page
+2. Enter Notes folder path → save → notes index builds → sidebar appears
+3. Run `bash sync.sh` → `Notes-New/` fills with `{Account}/{Folder}/{yyyy-MM-dd} {Title}.html`
+4. Open a note with an image → renders inline (base64, no rewriting)
+5. Open a note with a PDF/image attachment → attachment renders (broadened rewriter)
+6. Click "Sync Now" → spinner → POST `/api/sync` → note list refreshes
+7. Confirm "Recently Deleted" notes do NOT appear in sidebar
+8. Confirm notes sorted by last-edited date; 01-01-2001 notes at bottom
 
 ---
 
 ## Files to Change
 
-- **Modified:** `server.py`, `app.html`, `Launch Notes.command`, `README.md`, `NOTES_VIEWER.md`, `.gitignore`
-- **New:** `sync.sh`
-- **Untouched:** `make_demo.py`, `NOTES_VIEWER.md` (except sync section), demo Notes/ data
+**Phase 1**
+- **Modified:** `server.py`, `app.html`, `Launch Notes.command`, `README.md`, `NOTES_VIEWER.md`
+- **New:** `sync.sh`, `config.json` (user-created via settings page, gitignored)
+- **Untouched:** `make_demo.py`, demo Notes/ data
+
+**Phase 2**
+- **New:** Xcode project (`AppleNotesViewer/`), `AppDelegate.swift`, `Info.plist`, `AppIcon.icns`
+- **Modified:** `server.py` (config path resolution), `README.md` (app installation instructions)

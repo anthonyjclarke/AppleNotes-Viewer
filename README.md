@@ -2,25 +2,28 @@
 
 A local web app for browsing and searching your Apple Notes exports. Runs entirely on your Mac — no cloud, no accounts, no external dependencies beyond Python 3.
 
-> Built to work with exports from [Falcon Notes Exporter](https://falcon.star-lord.me/exporter).
+> **v2.0** — Built around [`apple-notes-exporter`](https://github.com/nicholasstephan/apple-notes-exporter). See [CHANGELOG.md](CHANGELOG.md) for what changed from v1.
 
 ---
 
-<!-- SCREENSHOT: Full three-column UI in light mode — sidebar with folders and tags, note list, note content open -->
+<!-- SCREENSHOT: Full three-column UI in light mode — sidebar with folders and tag pills, note list, note content open -->
 
 ---
 
 ## Features
 
 - **Three-column layout** — sidebar, note list, and content pane; mirrors the Apple Notes desktop experience
-- **Full-text search** — searches complete note body text, not just visible snippets; results as you type
-- **Folder scoping** — browse a single folder or search across all notes with one click
-- **`#tag` sidebar** — automatically detects hashtags in note bodies and lists them for one-click filtering
-- **Last-edited sort order** — notes sorted by last-edited date (matching iPhone), not creation date
-- **Resizable columns** — drag the divider between the note list and content pane; preference is saved
+- **Full-text search** — searches complete note body text, not just visible snippets; results highlighted as you type
+- **Folder navigation** — browse a single Apple Notes folder or search across all notes with one click
+- **Tag pills** — automatically detects `#hashtags` in note bodies and displays them as clickable pill chips, matching Apple Notes style
+- **Last-edited sort order** — notes sorted by last-edited date, matching what you see on iPhone
+- **Resizable columns** — drag either panel divider; preferences saved across sessions
+- **PDF preview modal** — click a PDF attachment card to view it inline, without leaving the app or opening a new tab
 - **Image lightbox** — click any embedded image to open it full-screen
-- **Light and dark mode** — toggle in the sidebar; preference persists across sessions
-- **No dependencies** — Python 3 stdlib only; one command to run
+- **Sync button** — re-runs the exporter incrementally and re-indexes, without restarting the server
+- **Startup loading screen** — server is immediately available; a progress bar tracks the index while notes load
+- **Light and dark mode** — toggle in the sidebar; preference persists
+- **No runtime dependencies** — Python 3 stdlib only; one file to serve the whole app
 
 ---
 
@@ -28,7 +31,7 @@ A local web app for browsing and searching your Apple Notes exports. Runs entire
 
 ### Light mode
 
-<!-- SCREENSHOT: Light mode — full UI showing sidebar with tag list, note list with date groups, and a note with inline images open -->
+<!-- SCREENSHOT: Light mode — full UI showing sidebar with tag pills, note list with date groups, and a note open -->
 
 ### Dark mode
 
@@ -36,19 +39,23 @@ A local web app for browsing and searching your Apple Notes exports. Runs entire
 
 ### Search
 
-<!-- SCREENSHOT: Search active — query typed, results highlighted in yellow in both title and snippet, "Search all notes" pill visible -->
+<!-- SCREENSHOT: Search active — query typed, results highlighted in yellow, "Search all notes" pill visible -->
 
 ### Tag filtering
 
-<!-- SCREENSHOT: Tag clicked in sidebar — search box auto-populated with #tag, filtered results shown -->
+<!-- SCREENSHOT: Tag pill selected in sidebar — filtered results shown -->
 
 ---
 
 ## Requirements
 
-- macOS (tested on Sonoma)
+- macOS (tested on Sonoma / Sequoia)
 - Python 3.9 or later (pre-installed on macOS)
-- [Falcon Notes Exporter](https://falcon.star-lord.me/exporter) to produce the HTML export
+- [`apple-notes-exporter`](https://github.com/nicholasstephan/apple-notes-exporter) — install with Homebrew:
+
+```bash
+brew install apple-notes-exporter
+```
 
 ---
 
@@ -61,92 +68,70 @@ git clone https://github.com/anthonyjclarke/apple-notes-viewer.git
 cd apple-notes-viewer
 ```
 
-### 2. Export your notes with Falcon
+### 2. Export your notes
 
-1. Download and install [Falcon Notes Exporter](https://falcon.star-lord.me/exporter)
-2. Open Falcon, select your Notes account and folders, and export as **HTML**
-3. Falcon produces a folder named after your account — typically `On My Mac` or your iCloud account name
-
-### 3. Place the export folder
-
-The `Notes/` directory already exists in the repo (it is tracked but its contents are gitignored — your notes never get committed).
-
-Move the exported folder from wherever Falcon saved it into `Notes/`:
-
-```
-AppleNotes-Viewer/
-└── Notes/
-    └── On My Mac/       ← move your exported folder here
-        ├── Note Title-DD-MM-YYYY.html
-        ├── images/
-        └── attachments/
-```
-
-In Terminal:
+Run `apple-notes-exporter` and point it at a folder you own — a subdirectory of Documents works well:
 
 ```bash
-mv ~/Desktop/"On My Mac" Notes/
+notes-export export --format html --output ~/Documents/AppleNotes
 ```
 
-For multiple accounts export each separately and place them alongside each other:
+This produces a folder structure like:
 
 ```
-Notes/
-├── On My Mac/
-└── iCloud/
+~/Documents/AppleNotes/
+├── iCloud/
+│   └── Notes/
+│       ├── 2024-06-15 Holiday plans.html
+│       └── 2024-06-15 Holiday plans (Attachments)/
+└── On My Mac/
+    └── Work/
+        └── 2023-11-20 Meeting notes.html
 ```
 
-### 4. Launch
+The app needs the **parent** directory (e.g. `~/Documents/AppleNotes`) — the one that holds `iCloud/` and `On My Mac/` — not the folders inside.
 
-Double-click **`Launch Notes.command`** in Finder. macOS will open Terminal, start the server, and open the app in your browser at `http://127.0.0.1:8765`.
+### 3. Launch
+
+Double-click **`Launch Notes.command`** in Finder. macOS opens Terminal, the server starts, and your browser opens at `http://127.0.0.1:8765`.
+
+On **first launch** you will see the Settings page. Click **Browse…**, navigate to your export folder, click **Select This Folder**, then **Save & Index Notes**. A progress bar tracks the index; the app opens automatically when done.
 
 To stop the server, close the Terminal window.
 
 ---
 
-## Updating your notes
+## Keeping notes up to date
 
-When you run a fresh export from Falcon:
+Click **↻ Sync** in the sidebar footer. This runs `apple-notes-exporter --incremental` (picks up only changed notes), then re-indexes. The sync button shows live progress and the note list refreshes when done.
 
-1. Stop the server (close the Terminal window)
-2. Delete the old account folder inside `Notes/`
-3. Move the new export folder into `Notes/`
-4. Double-click `Launch Notes.command` to relaunch
-
-The server re-indexes everything on startup. Full instructions are in [`NOTES_VIEWER.md`](NOTES_VIEWER.md).
+For the sync button to work, `apple-notes-exporter` must be on your `PATH` (the default Homebrew install location works). To use a different binary, set `NOTES_EXPORT_BIN` in your environment before launching.
 
 ---
 
 ## How it works
 
-`server.py` is a zero-dependency Python HTTP server. On startup it walks the `Notes/` directory, parses every HTML file, and builds an in-memory index of titles, body text, hashtags, and last-edited dates. The index is held in memory for the session — nothing is written to disk.
+`server.py` is a zero-dependency Python HTTP server. On startup it binds immediately and kicks off indexing in a background thread — the browser opens right away and shows a loading screen until the index is ready. The index holds note titles, body text, hashtags, dates, and folder paths in memory for the session. Nothing is written to disk at runtime beyond `config.json`, which stores your chosen Notes folder path.
 
-`app.html` is a single-file SPA that fetches from the server's JSON API and renders the UI. No build step, no framework.
+`app.html` is a single-file SPA that fetches from the server's JSON API and renders everything. No build step, no framework, no npm.
 
-| File                   | Purpose                                                              |
-|:-----------------------|:---------------------------------------------------------------------|
-| `server.py`            | HTTP server — indexes notes at startup, serves API and static files  |
-| `app.html`             | Single-page UI — layout, search, tag sidebar, lightbox               |
+| File                   | Purpose                                                               |
+|:-----------------------|:----------------------------------------------------------------------|
+| `server.py`            | HTTP server — indexes notes, serves all API routes and static files   |
+| `app.html`             | Single-page UI — layout, search, tag pills, PDF modal, lightbox       |
+| `sync.sh`              | Sync script — wraps `apple-notes-exporter --incremental`              |
 | `Launch Notes.command` | Double-click launcher — kills old instance, starts server, opens browser |
-| `Notes/`               | Export container — place Falcon export folders here                  |
-
-Notes are sorted by **last-edited date**. Falcon sets each exported file's modification time to the note's last-edit timestamp from Apple Notes, so the sort order matches iPhone exactly.
+| `config.json`          | Local config — your Notes folder path (gitignored, never committed)   |
 
 ---
 
 ## Keyboard shortcuts
 
-| Key         | Action                                       |
-|:------------|:---------------------------------------------|
-| `/` or `⌘F` | Focus search                                 |
-| `↑` / `↓`  | Move between notes                           |
-| `Escape`    | Clear search / deselect tag / close lightbox |
-
----
-
-## Operational guide
-
-[`NOTES_VIEWER.md`](NOTES_VIEWER.md) covers the full operational detail: folder layout, UI reference, update workflow, tag detection rules, troubleshooting, and technical reference.
+| Key         | Action                                            |
+|:------------|:--------------------------------------------------|
+| `/` or `⌘F` | Focus search                                      |
+| `↑` / `↓`  | Navigate between notes in the list               |
+| `Escape`    | Close PDF modal → close lightbox → clear search   |
 
 ---
 
