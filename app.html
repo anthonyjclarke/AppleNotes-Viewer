@@ -256,6 +256,16 @@
       width: 0%;
       transition: width 0.25s ease;
     }
+    /* Indeterminate sweep — shown while the file-scan phase has no total yet */
+    @keyframes scan-sweep {
+      0%   { transform: translateX(-150%); }
+      100% { transform: translateX(550%); }
+    }
+    .startup-bar-fill.scanning {
+      width: 22% !important;
+      transition: none;
+      animation: scan-sweep 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
     .startup-label {
       font-size: 13px;
       color: var(--tx-secondary);
@@ -805,7 +815,7 @@
     <a  class="pdf-modal-tab" id="pdfModalTab" href="" target="_blank" rel="noopener">Open in new tab ↗</a>
     <button class="pdf-modal-close" id="pdfModalClose" title="Close">×</button>
   </div>
-  <embed class="pdf-modal-embed" id="pdfModalEmbed" src="" type="application/pdf">
+  <iframe class="pdf-modal-embed" id="pdfModalEmbed" src="" title="PDF preview"></iframe>
 </div>
 
 <script>
@@ -1106,10 +1116,6 @@ async function openNote(file) {
 }
 
 function renderNote(rawHtml, file) {
-  const doc  = new DOMParser().parseFromString(rawHtml, "text/html");
-  const body = doc.body;
-
-  // Determine folder path for static URL rewriting
   const note = allNotes.find(n => n.file === file) || shownNotes.find(n => n.file === file) || {};
 
   // Per-segment encoding preserves "/" separators while safely encoding special
@@ -1117,55 +1123,18 @@ function renderNote(rawHtml, file) {
   // be treated as a URL fragment delimiter by the browser and truncate the request.
   const encRelPath = rel => rel.split("/").map(encodeURIComponent).join("/");
   const folderPath = encRelPath(note.folder || "");
+  const fullDate   = fmtFull(note.date || "");
+  const panel      = document.getElementById("contentPanel");
 
-  // Rewrite relative image src paths (base64 data: URIs are skipped by the regex)
-  body.querySelectorAll("img[src]").forEach(img => {
-    const src = img.getAttribute("src") || "";
-    if (src && !src.match(/^(https?:|data:|#|\/)/)) {
-      img.setAttribute("src", `/static/${folderPath}/${encRelPath(src)}`);
-    }
-    img.removeAttribute("style"); // let our CSS control sizing
-  });
-
-  // Rewrite relative attachment hrefs — handles apple-notes-exporter format:
-  //   "2026-04-15 My Note (Attachments)/Document.pdf"
-  //   "2026-04-15 My Note #tag (Attachments)/Pasted Graphic.png"
-  body.querySelectorAll("a[href]").forEach(a => {
-    const href = a.getAttribute("href") || "";
-    if (href && !href.match(/^(https?:|data:|#|\/)/)) {
-      const rewritten = `/static/${folderPath}/${encRelPath(href)}`;
-      a.setAttribute("href", rewritten);
-      if (href.toLowerCase().endsWith(".pdf")) {
-        // Mark <a> for the delegated PDF modal listener.
-        a.setAttribute("data-pdf-href", rewritten);
-        a.removeAttribute("target");   // prevent new-tab navigation
-        // apple-notes-exporter wraps the <a> in: flex-card > flex-1-div > <a>.
-        // Clicks on the emoji icon or "Scan File" text are siblings of <a>,
-        // not ancestors — so also mark the outer card div so the delegated
-        // closest("[data-pdf-href]") catches those clicks too.
-        const card = a.parentElement?.parentElement;
-        if (card && card !== body && card.style?.display === "flex") {
-          card.setAttribute("data-pdf-href", rewritten);
-          card.style.cursor = "pointer";
-        }
-      } else {
-        a.setAttribute("target", "_blank");
-        a.setAttribute("rel", "noopener");
-      }
-    }
-  });
-
-  // Same for <embed src> and <object data> (inline PDFs and media)
-  body.querySelectorAll("embed[src], object[data]").forEach(el => {
-    const attr = el.tagName === "OBJECT" ? "data" : "src";
-    const val  = el.getAttribute(attr) || "";
-    if (val && !val.match(/^(https?:|data:|#|\/)/)) {
-      el.setAttribute(attr, `/static/${folderPath}/${encRelPath(val)}`);
-    }
-  });
-
-  const fullDate = fmtFull(note.date || "");
-  const panel    = document.getElementById("contentPanel");
+  // Step 1 — parse raw HTML, strip inline image styles, plant raw innerHTML into
+  // the live DOM.  We make NO href/src changes in the detached document because
+  // Chrome's innerHTML serialiser can decode percent-encoded characters (e.g.
+  // "%23" → "#") in URL attributes, which breaks later detection logic for notes
+  // whose attachment folder name contains a "#" (e.g. "2019-12-23 Note #health
+  // (Attachments)/file.pdf").  All URL rewriting happens in Step 2 on the real
+  // DOM elements so there is zero serialisation round-trip for any URL.
+  const parsed = new DOMParser().parseFromString(rawHtml, "text/html");
+  parsed.body.querySelectorAll("img").forEach(img => img.removeAttribute("style"));
 
   panel.innerHTML = `
     <div class="content-bar">
@@ -1175,7 +1144,59 @@ function renderNote(rawHtml, file) {
       <div class="note-body" id="noteBody"></div>
     </div>`;
 
-  document.getElementById("noteBody").innerHTML = body.innerHTML;
+  document.getElementById("noteBody").innerHTML = parsed.body.innerHTML;
+
+  // Step 2 — rewrite all relative URLs and mark PDF cards in the LIVE DOM.
+  // getAttribute() returns the literal attribute value (never URL-resolves it),
+  // so "#" characters in folder names are read correctly and encoded by encRelPath.
+
+  document.querySelectorAll("#noteBody img[src]").forEach(img => {
+    const src = img.getAttribute("src") || "";
+    if (src && !src.match(/^(https?:|data:|#|\/)/))
+      img.setAttribute("src", `/static/${folderPath}/${encRelPath(src)}`);
+  });
+
+  document.querySelectorAll("#noteBody a[href]").forEach(a => {
+    const href = a.getAttribute("href") || "";
+    if (!href || href.match(/^(https?:|data:|#|\/)/)) return;
+
+    const rewritten = `/static/${folderPath}/${encRelPath(href)}`;
+    a.setAttribute("href",   rewritten);
+    a.setAttribute("target", "_blank");   // safe fallback if modal handler fails
+    a.setAttribute("rel",    "noopener");
+
+    if (!href.toLowerCase().endsWith(".pdf")) return;
+
+    // Mark the <a> itself for the delegated PDF modal listener.
+    a.setAttribute("data-pdf-href", rewritten);
+
+    // apple-notes-exporter card structure:
+    //   flex-card > [emoji-div, wrapper(flex:1) > [<a>, "Scan File" div]]
+    // Mark the wrapper so clicks on "Scan File" text are caught.
+    const wrapper = a.parentElement;
+    if (wrapper && wrapper.id !== "noteBody") {
+      wrapper.setAttribute("data-pdf-href", rewritten);
+      wrapper.style.cursor = "pointer";
+      // Mark the outer card so clicks on the emoji icon (sibling of wrapper) are caught.
+      const card = wrapper.parentElement;
+      if (card && card.id !== "noteBody") {
+        // Use getComputedStyle as fallback in case display comes from a CSS rule
+        // rather than an inline style attribute.
+        const disp = card.style.display || getComputedStyle(card).display;
+        if (disp === "flex") {
+          card.setAttribute("data-pdf-href", rewritten);
+          card.style.cursor = "pointer";
+        }
+      }
+    }
+  });
+
+  document.querySelectorAll("#noteBody embed[src], #noteBody object[data]").forEach(el => {
+    const attr = el.tagName === "OBJECT" ? "data" : "src";
+    const val  = el.getAttribute(attr) || "";
+    if (val && !val.match(/^(https?:|data:|#|\/)/))
+      el.setAttribute(attr, `/static/${folderPath}/${encRelPath(val)}`);
+  });
 
   // Lightbox for images
   document.querySelectorAll(".note-body img").forEach(img => {
@@ -1186,7 +1207,7 @@ function renderNote(rawHtml, file) {
   });
 
   // PDF links are intercepted via the delegated listener on contentPanel (see below),
-  // which handles any click target inside the <a> and survives note reloads.
+  // which handles any click target inside the card and survives note reloads.
 }
 
 /* ── Lightbox ───────────────────────────────────────────────────────── */
@@ -1206,16 +1227,31 @@ document.getElementById("pdfModal").addEventListener("click", e => {
   }
 });
 // PDF link interception — single delegated listener on the persistent contentPanel.
-// Handles clicks anywhere inside an attachment <a> (icon, text, card border, etc.)
-// without needing re-attachment on each note load.
+// Handles clicks anywhere inside an attachment card (emoji icon, "Scan File" text,
+// filename link) without needing re-attachment on each note load.
 document.getElementById("contentPanel").addEventListener("click", e => {
-  const a = e.target.closest("[data-pdf-href]");
-  if (!a) return;
+  // Primary path: data-pdf-href set by renderNote on the <a>, wrapper, and card.
+  let pdfHref = null;
+  const tagged = e.target.closest("[data-pdf-href]");
+  if (tagged) {
+    pdfHref = tagged.getAttribute("data-pdf-href");
+  } else {
+    // Fallback: direct click on an <a> pointing to a PDF (catches any case where
+    // data-pdf-href markup was not applied — e.g. if the URL contained "#" that
+    // confused the rewriter).  The href at this point is whatever the live DOM has
+    // (ideally the already-rewritten /static/… URL).
+    const link = e.target.closest("a[href]");
+    if (link) {
+      const h = link.getAttribute("href") || "";
+      if (h.toLowerCase().endsWith(".pdf")) pdfHref = h;
+    }
+  }
+
+  if (!pdfHref) return;
   e.preventDefault();
-  const href = a.getAttribute("data-pdf-href");
-  const name = decodeURIComponent(href.split("/").pop());
-  document.getElementById("pdfModalEmbed").src = href;
-  document.getElementById("pdfModalTab").href  = href;
+  const name = decodeURIComponent(pdfHref.split("/").pop());
+  document.getElementById("pdfModalEmbed").src = pdfHref;
+  document.getElementById("pdfModalTab").href  = pdfHref;
   document.getElementById("pdfModalName").textContent = name;
   document.getElementById("pdfModal").classList.add("open");
 });
@@ -1370,13 +1406,20 @@ async function waitForStartupIndex() {
     function poll() {
       fetch("/api/index-status").then(r => r.json()).then(d => {
         if (d.active) {
-          const pct = d.total > 0 ? Math.round(d.done / d.total * 100) : 0;
-          fill.style.width = pct + "%";
-          label.textContent = d.total > 0
-            ? `${d.done.toLocaleString()} of ${d.total.toLocaleString()} notes…`
-            : "Starting…";
+          if (d.total === 0) {
+            // File-scan phase — total is unknown; show indeterminate sweep
+            fill.classList.add("scanning");
+            label.textContent = "Scanning notes folder…";
+          } else {
+            // Indexing phase — total known, show determinate progress
+            fill.classList.remove("scanning");
+            const pct = Math.round(d.done / d.total * 100);
+            fill.style.width = pct + "%";
+            label.textContent = `${d.done.toLocaleString()} of ${d.total.toLocaleString()} notes…`;
+          }
           setTimeout(poll, 300);
         } else {
+          fill.classList.remove("scanning");
           fill.style.width = "100%";
           label.textContent = `✓ ${d.count.toLocaleString()} notes ready`;
           setTimeout(() => { overlay.classList.remove("open"); resolve(); }, 500);

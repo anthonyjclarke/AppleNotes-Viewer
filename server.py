@@ -72,7 +72,11 @@ class NoteParser(HTMLParser):
 
 # ── Tag extraction ───────────────────────────────────────────────────────
 
-_TAG_RE = re.compile(r'(?:^|\s)#([A-Za-z][A-Za-z0-9]{2,})')
+# Match hashtags that are not preceded by a word character (avoids URL fragments).
+# Two alternatives:
+#   letter-start: [A-Za-z] + 1+ alphanumeric  → catches #AI, #GPS (min 2 chars)
+#   digit-start:  digits + letter + alphanumeric → catches #10SmallSt, #60thBigBash
+_TAG_RE = re.compile(r'(?<!\w)#([A-Za-z][A-Za-z0-9]+|[0-9]+[A-Za-z][A-Za-z0-9]*)')
 _TAG_BLOCKLIST = {"heading", "slide", "gid", "vis", "showing", "sthash",
                   "providers", "dashboard", "exec"}
 
@@ -103,13 +107,14 @@ def load_config() -> dict:
 
 _lock  = threading.Lock()
 _state: dict = {
-    "notes":          [],
-    "index":          [],    # client-safe subset (no _ keys)
-    "folders":        [],
-    "tags":           [],
-    "last_sync":      None,  # datetime | None
-    "notes_root":     None,  # Path | None
-    "index_progress": {"active": False, "done": 0, "total": 0},
+    "notes":           [],
+    "index":           [],    # client-safe subset (no _ keys)
+    "folders":         [],
+    "tags":            [],
+    "last_sync":       None,  # datetime | None
+    "notes_root":      None,  # Path | None (only set when the dir actually exists)
+    "configured_root": "",    # raw string from config — may be invalid; shown in Settings
+    "index_progress":  {"active": False, "done": 0, "total": 0},
 }
 
 
@@ -158,17 +163,24 @@ def build_index(notes_root: Path) -> list:
 
         body    = p.body_text()
         snippet = body[:280].strip()
-        tags    = extract_tags(title + " " + body)
+
+        # Tags in the filename stem are Apple Notes' native tags — authoritative source.
+        # Strip the leading "YYYY-MM-DD " date prefix before extracting.
+        stem      = re.sub(r"^\d{4}-\d{2}-\d{2} ", "", html_file.stem)
+        stem_tags = extract_tags(stem)
+        body_tags = extract_tags(title + " " + body)
+        all_tags  = stem_tags | body_tags
 
         notes.append({
-            "file":    "/".join(parts),   # e.g. "iCloud/Notes/2026-04-15 My Note.html"
-            "folder":  folder,
-            "title":   title,
-            "date":    date.strftime("%Y-%m-%d"),
-            "snippet": snippet,
-            "_search": (title + " " + body).lower(),
-            "_path":   str(html_file),
-            "_tags":   tags,
+            "file":       "/".join(parts),   # e.g. "iCloud/Notes/2026-04-15 My Note.html"
+            "folder":     folder,
+            "title":      title,
+            "date":       date.strftime("%Y-%m-%d"),
+            "snippet":    snippet,
+            "_search":    (title + " " + body).lower(),
+            "_path":      str(html_file),
+            "_tags":      all_tags,
+            "_stem_tags": stem_tags,          # filename-sourced tags (native Apple Notes tags)
         })
 
         # Update progress every 25 files to limit lock contention
@@ -198,14 +210,22 @@ def _rebuild(notes_root: Path | None = None) -> None:
     index   = [{k: v for k, v in n.items() if not k.startswith("_")} for n in notes]
     folders = sorted({n["folder"] for n in notes})
 
-    tag_counts: dict[str, int] = {}
+    # Dual-source tag counting:
+    #   stem_tag_counts — tags found in filenames (native Apple Notes tags)
+    #   all_tag_counts  — tags from both filenames and note body text
+    # Show a tag if it appears in ≥1 note via filename (authoritative),
+    # or in ≥2 notes via body text (noise filter for body-only tags).
+    stem_tag_counts: dict[str, int] = {}
+    all_tag_counts:  dict[str, int] = {}
     for n in notes:
+        for t in n["_stem_tags"]:
+            stem_tag_counts[t] = stem_tag_counts.get(t, 0) + 1
         for t in n["_tags"]:
-            tag_counts[t] = tag_counts.get(t, 0) + 1
+            all_tag_counts[t] = all_tag_counts.get(t, 0) + 1
     tags = [
         {"tag": t, "count": c}
-        for t, c in sorted(tag_counts.items(), key=lambda x: (-x[1], x[0].lower()))
-        if c >= 2
+        for t, c in sorted(all_tag_counts.items(), key=lambda x: (-x[1], x[0].lower()))
+        if stem_tag_counts.get(t, 0) >= 1 or c >= 2
     ]
 
     with _lock:
@@ -295,6 +315,16 @@ _SETTINGS_HTML = """\
       width: 0%; transition: width 0.25s ease;
     }
     .progress-label { font-size: 12px; color: #636366; text-align: center; }
+    /* Indeterminate sweep — shown while scanning (total unknown) */
+    @keyframes scan-sweep {
+      0%   { transform: translateX(-150%); }
+      100% { transform: translateX(550%); }
+    }
+    .progress-fill.scanning {
+      width: 22% !important;
+      transition: none;
+      animation: scan-sweep 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
 
     /* Folder browser overlay */
     .browse-overlay {
@@ -473,13 +503,22 @@ _SETTINGS_HTML = """\
 
       function poll() {
         fetch("/api/index-status").then(r => r.json()).then(d => {
-          const pct = d.total > 0 ? Math.round(d.done / d.total * 100) : 0;
-          fill.style.width = pct + "%";
-          label.textContent = d.done.toLocaleString() + " / " +
-                              d.total.toLocaleString() + " notes indexed…";
           if (d.active) {
+            if (d.total === 0) {
+              // File-scan phase — total unknown; show indeterminate sweep
+              fill.classList.add("scanning");
+              label.textContent = "Scanning notes folder…";
+            } else {
+              // Indexing phase — show determinate progress
+              fill.classList.remove("scanning");
+              const pct = Math.round(d.done / d.total * 100);
+              fill.style.width = pct + "%";
+              label.textContent = d.done.toLocaleString() + " of " +
+                                  d.total.toLocaleString() + " notes indexed…";
+            }
             setTimeout(poll, 250);
           } else {
+            fill.classList.remove("scanning");
             fill.style.width = "100%";
             label.textContent = "✓ " + d.count.toLocaleString() + " notes indexed.";
             setTimeout(() => { window.location.href = "/"; }, 900);
@@ -543,8 +582,10 @@ class Handler(BaseHTTPRequestHandler):
         qs     = parse_qs(parsed.query)
         state  = self._snap()
 
-        # First-run guard: no Notes folder configured yet
-        if state["notes_root"] is None and path not in ("/settings", "/favicon.ico"):
+        # First-run guard: redirect to Settings until a valid notes folder is set.
+        # /api/browse must be allowed through so the Settings page browse button works.
+        _SETTINGS_PATHS = {"/settings", "/favicon.ico", "/api/browse"}
+        if state["notes_root"] is None and path not in _SETTINGS_PATHS:
             self.send_response(302)
             self.send_header("Location", "/settings")
             self.end_headers()
@@ -555,7 +596,10 @@ class Handler(BaseHTTPRequestHandler):
             self._file(APP_HTML, "text/html; charset=utf-8")
 
         elif path == "/settings":
-            current = str(state["notes_root"]) if state["notes_root"] else ""
+            # Prefer the live valid path; fall back to the raw configured string
+            # so the user can see and correct a stale/wrong path from config.json.
+            current = (str(state["notes_root"]) if state["notes_root"]
+                       else state.get("configured_root", ""))
             html    = _SETTINGS_HTML.replace("CURRENT_PATH", current)
             body    = html.encode()
             self.send_response(200)
@@ -640,15 +684,18 @@ class Handler(BaseHTTPRequestHandler):
             self._json({**prog, "count": count})
 
         elif path == "/api/browse":
-            # Directory browser used by the settings page file picker
+            # Directory browser used by the settings page file picker.
+            # req_path comes from whatever the user has typed in the path field.
             req_path = unquote(qs.get("path", [""])[0]).strip()
             if req_path:
                 browse_dir = Path(req_path).expanduser().resolve()
             else:
-                # Default: parent of current notes_root, or home
+                # No path typed: start near the current valid root, else home.
                 nr = state["notes_root"]
                 browse_dir = nr.parent if nr else Path.home()
 
+            # If the path doesn't exist (e.g. stale laptop path), fall back to home
+            # so the user can navigate from a known-good starting point.
             if not browse_dir.is_dir():
                 browse_dir = Path.home()
 
@@ -771,10 +818,14 @@ if __name__ == "__main__":
     cfg      = load_config()
     root_str = cfg.get("notes_root", "")
     if root_str:
+        # Always preserve the raw configured path so the Settings page can show
+        # it even when the directory doesn't exist on this machine.
+        with _lock:
+            _state["configured_root"] = root_str
         notes_root = Path(root_str).expanduser()
         if notes_root.is_dir():
             with _lock:
-                _state["notes_root"]    = notes_root
+                _state["notes_root"]     = notes_root
                 _state["index_progress"] = {"active": True, "done": 0, "total": 0}
             _start_rebuild_async(notes_root)
             print(f"Indexing notes…", flush=True)

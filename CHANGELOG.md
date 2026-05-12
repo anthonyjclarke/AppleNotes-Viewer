@@ -1,5 +1,44 @@
 # Changelog
 
+## [2.1.0] 12-05-2026
+
+### Fixed
+
+- **Tag extraction** — tags now match Apple Notes exactly:
+  - Digit-first tags (`#10SmallSt`, `#60thBigBash`) are now detected; the previous
+    regex required a letter as the first character
+  - Two-character tags (`#AI`) are now detected; the previous minimum was three characters
+  - Tags embedded by `apple-notes-exporter` in the HTML filename are extracted as the
+    authoritative source (`stem_tags`); body text tags still extracted as a secondary source
+  - Threshold: filename-sourced tags shown if they appear in ≥ 1 note; body-only tags
+    require ≥ 2 notes (noise filter unchanged)
+- **PDF inline viewer** — switched the modal embed from `<embed type="application/pdf">`
+  to `<iframe>` so PDFs render reliably in Safari and Chrome via the browsers' native viewer
+- **Settings browse button** — the folder picker was silently broken whenever
+  `notes_root` was `None` (first run or stale config): the first-run redirect guard was
+  blocking `/api/browse`; it is now explicitly allowed through
+- **Stale config path shown in Settings** — when the configured Notes folder does not
+  exist on the current machine (e.g. a path from a different Mac), the Settings page
+  now pre-fills the path field with the old value so it can be corrected, rather than
+  showing an empty field
+- **Indexing progress — scan phase** — before the total note count is known, both the
+  Settings page and the startup overlay now show an animated indeterminate sweep bar
+  with label "Scanning notes folder…" instead of "0 / 0 notes indexed…"
+- **PDF click in notes with `#` in attachment path** — notes where the attachment
+  folder name contained a `#tag` (e.g. `2019-12-23 Dermatologist #health
+  (Attachments)/…`) caused the PDF to open in the same browser tab instead of the
+  inline modal. Root cause: URL rewriting was done in a detached DOMParser document
+  and the resulting `innerHTML` was serialised/re-parsed into the live DOM; Chrome's
+  HTML serialiser can decode percent-encoded characters in URL attributes during that
+  round-trip, corrupting the `/static/…` href before `data-pdf-href` could be set.
+  Fixed by moving all URL rewriting and `data-pdf-href` marking to execute directly
+  on the live DOM elements (after `noteBody.innerHTML` is planted), eliminating the
+  serialisation round-trip entirely. A belt-and-suspenders fallback in the click
+  listener also now intercepts any `<a href="….pdf">` that was missed by the primary
+  marking pass.
+
+---
+
 ## [2.0.0] 11-05-2026
 
 Complete rewrite. The app is now built around the

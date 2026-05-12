@@ -2,7 +2,7 @@
 
 A local web app for browsing and searching your Apple Notes exports. Runs entirely on your Mac — no cloud, no accounts, no external dependencies beyond Python 3.
 
-> **v2.0** — Built around [`apple-notes-exporter`](https://github.com/nicholasstephan/apple-notes-exporter). See [CHANGELOG.md](CHANGELOG.md) for what changed from v1.
+> **v2.1** — Built around [`apple-notes-exporter`](https://github.com/nicholasstephan/apple-notes-exporter). See [CHANGELOG.md](CHANGELOG.md) for what changed from v1.
 
 ---
 
@@ -15,7 +15,7 @@ A local web app for browsing and searching your Apple Notes exports. Runs entire
 - **Three-column layout** — sidebar, note list, and content pane; mirrors the Apple Notes desktop experience
 - **Full-text search** — searches complete note body text, not just visible snippets; results highlighted as you type
 - **Folder navigation** — browse a single Apple Notes folder or search across all notes with one click
-- **Tag pills** — automatically detects `#hashtags` in note bodies and displays them as clickable pill chips, matching Apple Notes style
+- **Tag pills** — detects `#hashtags` from note text and filenames, matching Apple Notes exactly (including digit-first tags like `#10SmallSt` and short tags like `#AI`); displayed as clickable pill chips
 - **Last-edited sort order** — notes sorted by last-edited date, matching what you see on iPhone
 - **Resizable columns** — drag either panel divider; preferences saved across sessions
 - **PDF preview modal** — click a PDF attachment card to view it inline, without leaving the app or opening a new tab
