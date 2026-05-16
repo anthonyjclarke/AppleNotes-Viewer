@@ -553,11 +553,11 @@
     .note-body li { margin: 3px 0; }
     .note-body a { color: var(--accent); text-decoration: none; }
     .note-body a:hover { text-decoration: underline; }
-    .note-body embed, .note-body object {
+    .note-body embed, .note-body object, .note-body iframe {
       display: block;
       width: 100%;
       height: 600px;
-      border: none;
+      border: 1px solid rgba(0,0,0,0.1);
       border-radius: var(--radius);
       margin: 8px 0;
     }
@@ -631,14 +631,28 @@
       display: flex;
       align-items: center;
       gap: 8px;
+      transition: background var(--trans);
+    }
+    .sync-footer.syncing {
+      background: rgba(255, 204, 0, 0.09);
     }
     .sync-status {
       flex: 1;
       font-size: 11px;
-      color: var(--tx-tertiary);
+      color: var(--tx-secondary);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      transition: color var(--trans), font-weight var(--trans);
+    }
+    .sync-footer.syncing .sync-status {
+      color: var(--tx-primary);
+      font-weight: 500;
+      animation: sync-pulse 1.5s ease-in-out infinite;
+    }
+    @keyframes sync-pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.5; }
     }
     .sync-btn {
       flex-shrink: 0;
@@ -650,10 +664,16 @@
       font-size: 12px;
       font-family: inherit;
       cursor: pointer;
-      transition: border-color var(--trans), color var(--trans);
+      transition: border-color var(--trans), color var(--trans), background var(--trans);
     }
     .sync-btn:hover  { border-color: var(--accent); color: var(--tx-primary); }
     .sync-btn:disabled { opacity: 0.4; cursor: default; }
+    .sync-footer.syncing .sync-btn {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #1C1C1E;
+      opacity: 1;
+    }
 
     /* ── Settings gear button ─────────────────────────────────────── */
     .settings-btn {
@@ -668,6 +688,131 @@
       line-height: 1;
     }
     .settings-btn:hover { opacity: 1; }
+
+    /* ── Info button ─────────────────────────────────────────────── */
+    .info-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      border: 1.5px solid var(--tx-tertiary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 600;
+      font-family: Georgia, serif;
+      color: var(--tx-tertiary);
+      opacity: 0.7;
+      padding: 0;
+      line-height: 1;
+      transition: opacity var(--trans), color var(--trans), border-color var(--trans);
+      flex-shrink: 0;
+    }
+    .info-btn:hover {
+      opacity: 1;
+      color: var(--tx-primary);
+      border-color: var(--tx-primary);
+    }
+
+    /* ── About modal ──────────────────────────────────────────────── */
+    .about-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 4000;
+      background: rgba(0,0,0,0.45);
+      align-items: center;
+      justify-content: center;
+    }
+    .about-overlay.open { display: flex; }
+    .about-modal {
+      background: var(--bg-content);
+      border-radius: 14px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+      width: 420px;
+      max-width: calc(100vw - 40px);
+      max-height: calc(100vh - 60px);
+      overflow-y: auto;
+      padding: 28px 28px 24px;
+      position: relative;
+    }
+    .about-close {
+      position: absolute;
+      top: 14px;
+      right: 16px;
+      background: var(--bg-hover);
+      border: none;
+      cursor: pointer;
+      font-size: 16px;
+      color: var(--tx-secondary);
+      line-height: 1;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background var(--trans), color var(--trans);
+    }
+    .about-close:hover { background: var(--bg-search); color: var(--tx-primary); }
+    .about-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--tx-primary);
+      margin-bottom: 2px;
+    }
+    .about-version {
+      font-size: 11px;
+      color: var(--tx-tertiary);
+      margin-bottom: 16px;
+    }
+    .about-desc {
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--tx-secondary);
+      margin-bottom: 16px;
+    }
+    .about-section {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--tx-tertiary);
+      margin: 16px 0 6px;
+    }
+    .about-links {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .about-links a {
+      font-size: 13px;
+      color: var(--accent);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    [data-theme="dark"] .about-links a { color: #FFD60A; }
+    .about-links a:hover { text-decoration: underline; }
+    .about-divider {
+      border: none;
+      border-top: 1px solid var(--divider);
+      margin: 16px 0;
+    }
+    .about-credit {
+      font-size: 12px;
+      color: var(--tx-tertiary);
+      line-height: 1.6;
+    }
+    .about-credit a {
+      color: var(--tx-secondary);
+      text-decoration: none;
+    }
+    .about-credit a:hover { text-decoration: underline; }
 
     /* ── PDF preview modal ────────────────────────────────────────── */
     .pdf-modal {
@@ -746,6 +891,7 @@
     <div class="sidebar-top">
       <span class="sidebar-title">Notes</span>
       <div style="display:flex;align-items:center;gap:6px;">
+        <button class="info-btn" id="infoBtn" title="About">i</button>
         <button class="settings-btn" id="settingsBtn" title="Settings">⚙️</button>
         <div class="toggle-wrap" id="themeToggleWrap" title="Toggle dark mode">
           <span class="toggle-emoji" id="themeEmoji">☀️</span>
@@ -816,6 +962,56 @@
     <button class="pdf-modal-close" id="pdfModalClose" title="Close">×</button>
   </div>
   <iframe class="pdf-modal-embed" id="pdfModalEmbed" src="" title="PDF preview"></iframe>
+</div>
+
+<!-- ── About modal ──────────────────────────────────────────────── -->
+<div class="about-overlay" id="aboutOverlay">
+  <div class="about-modal" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
+    <button class="about-close" id="aboutClose" title="Close">✕</button>
+
+    <div class="about-title" id="aboutTitle">Apple Notes Viewer</div>
+    <div class="about-version">v2.2 — Local web viewer for Apple Notes exports</div>
+
+    <p class="about-desc">
+      A zero-dependency local web app for browsing and searching your Apple Notes.
+      Export your notes once with <strong>apple-notes-exporter</strong>, point the app
+      at the folder, and get a fast three-column interface with full-text search, tag
+      filtering, PDF previews, and light/dark mode — all running entirely on your Mac
+      with no cloud, no accounts, and no internet required.
+    </p>
+
+    <div class="about-section">How to use</div>
+    <p class="about-desc" style="margin-bottom:0">
+      1. Install <em>apple-notes-exporter</em> and run an initial export — pay careful attention to the export format (<code style="font-size:12px;background:var(--bg-search);padding:1px 5px;border-radius:4px;">--format html</code>) and output path options.<br>
+      2. Launch via <strong>Launch Notes.command</strong> or <code style="font-size:12px;background:var(--bg-search);padding:1px 5px;border-radius:4px;">python3 server.py</code> in Terminal.<br>
+      3. On first run, use Settings (⚙️) to select your export folder.<br>
+      4. Press <strong>↻ Sync</strong> anytime to pull in new and changed notes.
+    </p>
+    <p class="about-desc" style="margin-top:10px;margin-bottom:0">
+      Full setup and operational details are in <code style="font-size:12px;background:var(--bg-search);padding:1px 5px;border-radius:4px;">README.md</code> in the project folder.
+    </p>
+
+    <hr class="about-divider">
+
+    <div class="about-section">Built by</div>
+    <div class="about-links">
+      <a href="https://github.com/anthonyjclarke/apple-notes-viewer" target="_blank" rel="noopener">
+        ⌥ github.com/anthonyjclarke/apple-notes-viewer
+      </a>
+      <a href="https://bsky.app/profile/anthonyjclarke.bsky.social" target="_blank" rel="noopener">
+        ◆ @anthonyjclarke.bsky.social
+      </a>
+    </div>
+
+    <hr class="about-divider">
+
+    <div class="about-credit">
+      Notes export powered by
+      <a href="https://github.com/kzaremski/apple-notes-exporter" target="_blank" rel="noopener">apple-notes-exporter</a>
+      by <a href="https://github.com/kzaremski" target="_blank" rel="noopener">Konstantin Zaremski</a>.
+      Many thanks for building and maintaining such a capable utility.
+    </div>
+  </div>
 </div>
 
 <script>
@@ -1191,11 +1387,49 @@ function renderNote(rawHtml, file) {
     }
   });
 
+  // Step 3 — convert PDF embeds and exporter attachment cards to inline iframes.
+  // <embed>/<object> pointing at PDFs: rewrite URL then replace with <iframe>.
+  // Safari does not render <embed type="application/pdf"> reliably.
   document.querySelectorAll("#noteBody embed[src], #noteBody object[data]").forEach(el => {
     const attr = el.tagName === "OBJECT" ? "data" : "src";
     const val  = el.getAttribute(attr) || "";
-    if (val && !val.match(/^(https?:|data:|#|\/)/))
-      el.setAttribute(attr, `/static/${folderPath}/${encRelPath(val)}`);
+    if (!val) return;
+    const src = val.match(/^(https?:|data:|#|\/)/)
+      ? val
+      : `/static/${folderPath}/${encRelPath(val)}`;
+    const toCssLen = v => /^\d+$/.test(v) ? v + "px" : v;
+    const iframe = document.createElement("iframe");
+    iframe.src   = src;
+    iframe.title = decodeURIComponent(src.split("/").pop());
+    iframe.style.width  = toCssLen(el.getAttribute("width")  || "100%");
+    iframe.style.height = toCssLen(el.getAttribute("height") || "600");
+    el.replaceWith(iframe);
+  });
+
+  // apple-notes-exporter PDF attachment cards (<a href> inside a styled flex div):
+  // replace the outermost data-pdf-href element with an inline iframe.
+  // Skip inner elements that are also marked — only process the outermost card.
+  document.querySelectorAll("#noteBody [data-pdf-href]").forEach(el => {
+    if (el.parentElement && el.parentElement.closest("#noteBody [data-pdf-href]")) return;
+    const pdfHref = el.getAttribute("data-pdf-href");
+    const name    = decodeURIComponent(pdfHref.split("/").pop());
+    const iframe  = document.createElement("iframe");
+    iframe.src    = pdfHref;
+    iframe.title  = name;
+    el.replaceWith(iframe);
+  });
+
+  // Step 4 — suppress hashtag-only <h1> headings injected by the exporter.
+  // The real exporter splits "Title #tag" into separate h1 elements per token,
+  // producing <h1>Title </h1><h1>#tag</h1><h1> <br></h1>.  Keep the first
+  // non-empty h1 (the note title); hide any subsequent h1 whose text is solely
+  // #hashtag tokens or whitespace.
+  let _seenTitle = false;
+  document.querySelectorAll("#noteBody h1").forEach(h1 => {
+    const text = h1.textContent.replace(/\s+/g, " ").trim();
+    if (!text) { h1.style.display = "none"; return; }
+    if (!_seenTitle) { _seenTitle = true; return; }
+    if (/^(#[A-Za-zÀ-ɏ]\w*\s*)+$/.test(text)) h1.style.display = "none";
   });
 
   // Lightbox for images
@@ -1332,6 +1566,20 @@ document.getElementById("settingsBtn").addEventListener("click", () => {
   window.location.href = "/settings";
 });
 
+/* ── About modal ────────────────────────────────────────────────────── */
+(function () {
+  const overlay = document.getElementById("aboutOverlay");
+  const open  = () => overlay.classList.add("open");
+  const close = () => overlay.classList.remove("open");
+
+  document.getElementById("infoBtn").addEventListener("click", open);
+  document.getElementById("aboutClose").addEventListener("click", close);
+  overlay.addEventListener("click", e => { if (e.target === overlay) close(); });
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && overlay.classList.contains("open")) close();
+  });
+})();
+
 /* ── Sync ───────────────────────────────────────────────────────────── */
 async function loadSyncStatus() {
   try {
@@ -1351,7 +1599,12 @@ async function pollIndexProgress(btn, sta) {
     function poll() {
       fetch("/api/index-status").then(r => r.json()).then(d => {
         if (d.active) {
-          if (d.total > 0) btn.textContent = "↻ " + Math.round(d.done / d.total * 100) + "%";
+          if (d.total === 0) {
+            sta.textContent = "Scanning…";
+          } else {
+            sta.textContent = `Indexing ${d.done} / ${d.total}…`;
+            btn.textContent = "↻ " + Math.round(d.done / d.total * 100) + "%";
+          }
           setTimeout(poll, 300);
         } else {
           sta.textContent = "Synced just now";
@@ -1368,10 +1621,14 @@ async function pollIndexProgress(btn, sta) {
 }
 
 document.getElementById("syncBtn").addEventListener("click", async () => {
-  const btn = document.getElementById("syncBtn");
-  const sta = document.getElementById("syncStatus");
+  const btn    = document.getElementById("syncBtn");
+  const sta    = document.getElementById("syncStatus");
+  const footer = btn.closest(".sync-footer");
+  const done   = () => { footer.classList.remove("syncing"); btn.disabled = false; btn.textContent = "↻ Sync"; };
   btn.disabled = true;
   btn.textContent = "↻ Syncing…";
+  sta.textContent = "Exporting notes…";
+  footer.classList.add("syncing");
   try {
     // Phase 1: sync.sh runs synchronously server-side (fast for incremental)
     const r = await fetch("/api/sync", { method: "POST" });
@@ -1379,19 +1636,23 @@ document.getElementById("syncBtn").addEventListener("click", async () => {
     if (d.status === "indexing") {
       // Phase 2: indexing is async — poll for progress
       btn.textContent = "↻ 0%";
+      sta.textContent = "Scanning…";
       await pollIndexProgress(btn, sta);
+      done();
     } else if (d.status === "ok") {
       sta.textContent = "Synced just now";
       await loadFolders(); await loadTags();
       updateSearchAllPill(); await loadNoteList();
-      btn.disabled = false; btn.textContent = "↻ Sync";
+      done();
     } else {
+      sta.textContent = "Sync failed";
       alert("Sync failed: " + (d.message || "unknown error"));
-      btn.disabled = false; btn.textContent = "↻ Sync";
+      done();
     }
   } catch (e) {
+    sta.textContent = "Sync error";
     alert("Sync error: " + e.message);
-    btn.disabled = false; btn.textContent = "↻ Sync";
+    done();
   }
 });
 

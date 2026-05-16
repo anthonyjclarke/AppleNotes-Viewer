@@ -1,5 +1,34 @@
 # Changelog
 
+## [2.2.0] 16-05-2026
+
+### Added
+
+- **About modal** — new "i" info button in the sidebar header opens an About panel
+  with version, how-to-use steps, GitHub and BlueSky links, and attribution to
+  `apple-notes-exporter` by Konstantin Zaremski.
+- **PDF attachments rendered inline** — PDF attachment cards produced by
+  `apple-notes-exporter` (the styled flex-card structure) are now replaced with inline
+  `<iframe>` elements directly in the note body, showing the PDF without needing to
+  click a modal. `<embed>` and `<object>` elements are likewise replaced with
+  `<iframe>` (not just src-rewritten), so PDF content displays in both Safari and Chrome.
+
+### Fixed
+
+- **Hashtag `<h1>` clutter** — `apple-notes-exporter` splits note titles containing
+  `#tags` into one `<h1>` element per token (e.g. `<h1>Meeting </h1><h1>#work</h1>`).
+  The viewer now hides any `<h1>` after the first whose content is solely `#hashtag`
+  tokens, eliminating the duplicate heading and orphaned tag fragment.
+- **Sync footer visual feedback** — the sync footer now enters a visible "syncing"
+  state: yellow-tinted background, pulsing status label, and a yellow-filled sync
+  button. Status text is more granular: "Exporting notes…" during the sync.sh phase,
+  "Scanning…" during the indeterminate rglob phase, and "Indexing X / Y…" once the
+  total is known.
+- **`<iframe>` styling** — inline `<iframe>` elements (PDF embeds) now share the same
+  bordered, rounded-corner box style as `<embed>`/`<object>` in the note body.
+
+---
+
 ## [2.1.0] 12-05-2026
 
 ### Fixed
@@ -42,7 +71,7 @@
 ## [2.0.0] 11-05-2026
 
 Complete rewrite. The app is now built around the
-[`apple-notes-exporter`](https://github.com/nicholasstephan/apple-notes-exporter) CLI
+[`apple-notes-exporter`](https://github.com/kzaremski/apple-notes-exporter) CLI
 instead of Falcon Notes Exporter. The Notes folder is user-selectable via the in-app
 Settings page — no manual file placement required.
 
