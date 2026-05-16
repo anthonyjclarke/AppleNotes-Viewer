@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.3.0] 16-05-2026
+
+### Added
+
+- **Windows support** — `Launch Notes.bat` double-click launcher for Windows; kills any
+  existing server on port 8765, starts Python server backgrounded in the same console
+  window (closing the window stops the server), waits 2 s, then opens the browser.
+  Includes a Python availability check with a clear install message if Python is missing.
+- **Windows-aware Settings page** — path placeholder and hint text are now OS-specific;
+  Windows users see a Windows-style path example and an Explorer address-bar tip instead
+  of the macOS Finder/Terminal instructions.
+- **Windows sync error message** — clicking ↻ Sync on Windows returns a clear message
+  explaining that export requires macOS and describing the manual copy workflow, rather
+  than silently failing or attempting to run `sync.sh`.
+- **README platform sections** — README rewritten with dedicated macOS and Windows
+  quick-start sections, platform support table, and Windows-specific notes-update workflow.
+
+---
+
 ## [2.2.0] 16-05-2026
 
 ### Added

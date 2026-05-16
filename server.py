@@ -4,6 +4,7 @@
 import json
 import re
 import subprocess
+import sys
 import threading
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
@@ -407,11 +408,11 @@ _SETTINGS_HTML = """\
     <label for="notesPath">Notes folder path</label>
     <div class="path-row">
       <input type="text" id="notesPath"
-             placeholder="/Users/you/Documents/AppleNotes"
+             placeholder="PLACEHOLDER_PATH"
              value="CURRENT_PATH">
       <button class="browse-open-btn" id="browseOpenBtn" type="button">Browse…</button>
     </div>
-    <p class="hint">Tip: drag the folder from Finder into Terminal and copy the path shown.</p>
+    <p class="hint">PATH_TIP_TEXT</p>
 
     <button class="btn" id="saveBtn">Save &amp; Index Notes</button>
     <div class="msg" id="msg"></div>
@@ -464,7 +465,10 @@ _SETTINGS_HTML = """\
       }
 
       if (d.entries.length === 0) {
-        list.innerHTML += '<div class="browse-empty">No subfolders</div>';
+        const empty = document.createElement("div");
+        empty.className = "browse-empty";
+        empty.textContent = "No subfolders";
+        list.appendChild(empty);
         return;
       }
 
@@ -600,7 +604,16 @@ class Handler(BaseHTTPRequestHandler):
             # so the user can see and correct a stale/wrong path from config.json.
             current = (str(state["notes_root"]) if state["notes_root"]
                        else state.get("configured_root", ""))
-            html    = _SETTINGS_HTML.replace("CURRENT_PATH", current)
+            if sys.platform == "win32":
+                placeholder = r"C:\Users\you\Documents\AppleNotes"
+                tip = r"Tip: copy the path from Explorer's address bar, e.g. C:\Users\You\Documents\AppleNotes"
+            else:
+                placeholder = "/Users/you/Documents/AppleNotes"
+                tip = "Tip: drag the folder from Finder into Terminal and copy the path shown."
+            html = (_SETTINGS_HTML
+                    .replace("CURRENT_PATH", current)
+                    .replace("PLACEHOLDER_PATH", placeholder)
+                    .replace("PATH_TIP_TEXT", tip))
             body    = html.encode()
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -763,6 +776,16 @@ class Handler(BaseHTTPRequestHandler):
 
         # ── Trigger sync ────────────────────────────────────────────────
         elif path == "/api/sync":
+            if sys.platform == "win32":
+                self._json({
+                    "status": "error",
+                    "message": (
+                        "Sync is not available on Windows. "
+                        "Export your notes on your Mac using apple-notes-exporter, "
+                        "then copy the updated export folder to this machine."
+                    ),
+                })
+                return
             sync_sh = BASE_DIR / "sync.sh"
             if not sync_sh.exists():
                 self._json({"status": "error", "message": "sync.sh not found"}); return
