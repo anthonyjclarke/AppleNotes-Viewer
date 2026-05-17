@@ -871,7 +871,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"status": "syncing"})
                 return
 
-            notes_root = state.get("notes_root")
+            notes_root = _state.get("notes_root")
             if not notes_root:
                 self._json({"status": "error",
                             "message": "Notes folder not configured. Open Settings first."})

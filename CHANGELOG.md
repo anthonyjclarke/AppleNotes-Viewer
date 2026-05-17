@@ -25,6 +25,18 @@
 
 ---
 
+## [2.4.1] 17-05-2026
+
+### Fixed
+
+- **Sync crash on POST `/api/sync`** — `NameError: name 'state' is not defined` caused
+  the sync endpoint to return a 500 and the browser to show "Failed to fetch". Fixed
+  typo: `state.get("notes_root")` → `_state.get("notes_root")`.
+- **Version strings** — About modal, README, and CLAUDE.md now consistently show the
+  current version.
+
+---
+
 ## [2.4.0] 17-05-2026
 
 ### Added
