@@ -12,9 +12,19 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BINARY="${NOTES_EXPORT_BIN:-notes-export}"
 CONFIG="$SCRIPT_DIR/config.json"
 
-# Verify the binary is available
+# Finder/launchd strip PATH to /usr/bin:/bin:/usr/sbin:/sbin — probe common locations
 if ! command -v "$BINARY" &>/dev/null; then
-  echo "ERROR: '$BINARY' not found in PATH." >&2
+  for _c in /usr/local/bin/notes-export \
+             /opt/homebrew/bin/notes-export \
+             "/Applications/Apple Notes Exporter.app/Contents/SharedSupport/notes-export" \
+             "$HOME/bin/notes-export" \
+             "$HOME/.local/bin/notes-export"; do
+    if [[ -x "$_c" ]]; then BINARY="$_c"; break; fi
+  done
+fi
+
+if ! { command -v "$BINARY" &>/dev/null || [[ -x "$BINARY" ]]; }; then
+  echo "ERROR: 'notes-export' not found in PATH." >&2
   echo "  Download from https://github.com/kzaremski/apple-notes-exporter/releases" >&2
   echo "  Place in /usr/local/bin/ or set: export NOTES_EXPORT_BIN=/path/to/notes-export" >&2
   exit 1
@@ -38,6 +48,7 @@ echo "Exporting notes to: $NOTES_ROOT"
 "$BINARY" export \
   --format html \
   --incremental \
+  --verbose \
   --output "$NOTES_ROOT"
 
 echo "Done."

@@ -4,7 +4,7 @@
 
 Local single-page web app for browsing and searching Apple Notes exports produced by
 [`apple-notes-exporter`](https://github.com/kzaremski/apple-notes-exporter) CLI.
-v2.2 — Python 3 stdlib only, no framework, no build step.
+v2.4 — Python 3 stdlib only, no framework, no build step.
 
 ---
 
@@ -72,6 +72,24 @@ elements per token. `renderNote()` Step 4 hides subsequent `<h1>`s whose text is
 **Indeterminate scan phase** — `build_index()` calls `rglob("*.html")` before the total
 count is known. When `index_progress.total == 0`, the startup overlay and Settings
 progress bar show an animated sweep + "Scanning notes folder…" instead of "0 / 0".
+
+**`notes-export` binary probe** — Finder/launchd strip PATH to a minimal set, so
+`shutil.which("notes-export")` fails when launched via `Launch Notes.command`.
+`_find_notes_export_bin()` probes five hardcoded paths, including the app bundle at
+`/Applications/Apple Notes Exporter.app/Contents/SharedSupport/notes-export`. `sync.sh`
+applies the same probe. Never rely on PATH alone for this binary.
+
+**Exporter `<pre>` fragmentation** — `apple-notes-exporter` wraps every text run between
+bold markers in its own `<pre style='background:#f5f5f5'>` element. `renderNote()` Step 5
+collapses consecutive runs (fingerprint: `background:\s*#f5f5f5` on the style attribute),
+merges their `innerHTML`, strips `**` bold delimiters, converts markdown headings/bullets/
+pipe-tables, and outputs a single `.exporter-prose` div. All processing is on live DOM
+nodes — never on a detached/serialised document (see PDF `%23` gotcha above).
+
+**Sync progress state** — `_state["sync_progress"]` holds `{active, done, total, current,
+error}`. POST `/api/sync` sets `active: True` before spawning `_run_export_async()`;
+GET `/api/sync` includes the full `sync_progress` snapshot. The client polls GET during
+export (via `pollSyncProgress`), then hands off to `pollIndexProgress` for re-indexing.
 
 ---
 

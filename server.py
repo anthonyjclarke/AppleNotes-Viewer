@@ -2,7 +2,9 @@
 """Notes Viewer — local HTTP server"""
 
 import json
+import os
 import re
+import shutil
 import subprocess
 import sys
 import threading
@@ -18,6 +20,26 @@ PORT     = 8765
 
 _CONFIG_FILE  = BASE_DIR / "config.json"
 _SKIP_FOLDERS = {"Recently Deleted"}   # Apple Notes folders excluded from index
+
+_NOTES_EXPORT_CANDIDATES = [
+    "/usr/local/bin/notes-export",
+    "/opt/homebrew/bin/notes-export",
+    "/Applications/Apple Notes Exporter.app/Contents/SharedSupport/notes-export",
+    str(Path.home() / "bin/notes-export"),
+    str(Path.home() / ".local/bin/notes-export"),
+]
+
+def _find_notes_export_bin() -> str | None:
+    env_bin = os.environ.get("NOTES_EXPORT_BIN", "").strip()
+    if env_bin and os.path.isfile(env_bin) and os.access(env_bin, os.X_OK):
+        return env_bin
+    found = shutil.which("notes-export")
+    if found:
+        return found
+    for c in _NOTES_EXPORT_CANDIDATES:
+        if os.path.isfile(c) and os.access(c, os.X_OK):
+            return c
+    return None
 
 MIME = {
     ".html": "text/html; charset=utf-8",
@@ -116,6 +138,7 @@ _state: dict = {
     "notes_root":      None,  # Path | None (only set when the dir actually exists)
     "configured_root": "",    # raw string from config — may be invalid; shown in Settings
     "index_progress":  {"active": False, "done": 0, "total": 0},
+    "sync_progress":   {"active": False, "done": 0, "total": 0, "current": "", "error": None},
 }
 
 
@@ -245,6 +268,58 @@ def _rebuild(notes_root: Path | None = None) -> None:
 def _start_rebuild_async(notes_root: Path | None = None) -> None:
     """Start _rebuild() in a background daemon thread. Returns immediately."""
     threading.Thread(target=_rebuild, args=(notes_root,), daemon=True).start()
+
+
+def _run_export_async(notes_root: Path, bin_path: str) -> None:
+    """Run notes-export in a background thread, streaming per-note progress into _state."""
+    def run():
+
+        try:
+            proc = subprocess.Popen(
+                [bin_path, "export",
+                 "--format", "html",
+                 "--incremental",
+                 "--verbose",
+                 "--output", str(notes_root)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            done = 0
+            for line in proc.stderr:
+                line = line.rstrip()
+                if not line:
+                    continue
+                done += 1
+                with _lock:
+                    _state["sync_progress"]["done"]    = done
+                    _state["sync_progress"]["current"] = line[:80]
+            proc.wait(timeout=300)
+            if proc.returncode != 0:
+                with _lock:
+                    _state["sync_progress"].update(
+                        {"active": False, "error": f"Export failed (exit {proc.returncode})"})
+                return
+        except subprocess.TimeoutExpired:
+            try: proc.kill()
+            except Exception: pass
+            with _lock:
+                _state["sync_progress"].update(
+                    {"active": False, "error": "Export timed out after 5 minutes"})
+            return
+        except Exception as e:
+            with _lock:
+                _state["sync_progress"].update({"active": False, "error": str(e)})
+            return
+
+        now = datetime.now()
+        with _lock:
+            _state["last_sync"] = now
+            _state["sync_progress"]["active"] = False
+            _state["index_progress"] = {"active": True, "done": 0, "total": 0}
+        _start_rebuild_async()
+
+    threading.Thread(target=run, daemon=True).start()
 
 
 # ── Settings page ────────────────────────────────────────────────────────
@@ -685,9 +760,12 @@ class Handler(BaseHTTPRequestHandler):
 
         elif path == "/api/sync":
             last = state["last_sync"]
+            with _lock:
+                sync_prog = dict(_state["sync_progress"])
             self._json({
-                "last_synced": last.isoformat() if last else None,
-                "count":       len(state["notes"]),
+                "last_synced":   last.isoformat() if last else None,
+                "count":         len(state["notes"]),
+                "sync_progress": sync_prog,
             })
 
         elif path == "/api/index-status":
@@ -786,28 +864,36 @@ class Handler(BaseHTTPRequestHandler):
                     ),
                 })
                 return
-            sync_sh = BASE_DIR / "sync.sh"
-            if not sync_sh.exists():
-                self._json({"status": "error", "message": "sync.sh not found"}); return
-            try:
-                subprocess.run(
-                    ["bash", str(sync_sh)],
-                    timeout=300, check=True,
-                    capture_output=True, text=True,
-                )
-                now = datetime.now()
-                with _lock:
-                    _state["last_sync"] = now
-                    _state["index_progress"] = {"active": True, "done": 0, "total": 0}
-                _start_rebuild_async()          # index in background
-                self._json({"status": "indexing"})
-            except subprocess.TimeoutExpired:
-                self._json({"status": "error", "message": "Sync timed out after 5 minutes"})
-            except subprocess.CalledProcessError as e:
+
+            with _lock:
+                already = _state["sync_progress"].get("active", False)
+            if already:
+                self._json({"status": "syncing"})
+                return
+
+            notes_root = state.get("notes_root")
+            if not notes_root:
                 self._json({"status": "error",
-                            "message": e.stderr.strip() or "sync.sh exited with an error"})
-            except Exception as e:
-                self._json({"status": "error", "message": str(e)})
+                            "message": "Notes folder not configured. Open Settings first."})
+                return
+
+            bin_path = _find_notes_export_bin()
+            if not bin_path:
+                self._json({
+                    "status": "error",
+                    "message": (
+                        "notes-export binary not found.\n"
+                        "  Download from https://github.com/kzaremski/apple-notes-exporter/releases\n"
+                        "  Place in /usr/local/bin/ or set: export NOTES_EXPORT_BIN=/path/to/notes-export"
+                    ),
+                })
+                return
+
+            with _lock:
+                _state["sync_progress"] = {"active": True, "done": 0, "total": 0,
+                                            "current": "Starting…", "error": None}
+            _run_export_async(notes_root, bin_path)
+            self._json({"status": "syncing"})
 
         else:
             self.send_error(405)

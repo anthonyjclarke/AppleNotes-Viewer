@@ -1,5 +1,65 @@
 # Changelog
 
+## [Unreleased]
+
+### To Do
+
+- **Sync progress** — verify verbose output format from `notes-export --verbose` once
+  Full Disk Access is granted to Terminal; confirm per-note stderr line count matches
+  `done` counter in `sync_progress` state.
+- **Pipe tables → HTML tables** — parse pipe-delimited markdown tables inside
+  `exporter-prose` blocks and render them as proper `<table>` elements using the app's
+  existing styled table CSS (striped rows, borders, rounded corners). Currently rendered
+  as monospace fixed-width text.
+- **Literal `**bold**` cleanup** — some exporter output uses raw `**text**` in plain
+  text nodes rather than `<b>**text**</b>` tags (e.g. `**Colour key:**` footer lines).
+  A second regex pass over text nodes inside `.exporter-prose` would strip these
+  remaining `**` markers and apply `<strong>` styling.
+- **System font** — switch the app's base font to `-apple-system, "SF Pro Text",
+  sans-serif` to match Apple Notes' native macOS typeface. Low effort, noticeable
+  authenticity improvement.
+- **Horizontal rules** — `---` on its own line inside exporter blocks should be
+  converted to a `<hr>` element, matching Apple Notes' divider style.
+- when searching highlight the search in the preview pane as well
+- why is app stripping out YYYY-mm-dd from filename when opening / sync?
+
+---
+
+## [2.4.0] 17-05-2026
+
+### Added
+
+- **Sync progress feedback** — sync is now fully non-blocking. POST `/api/sync` returns
+  immediately; the export runs in a background thread via `subprocess.Popen`, streaming
+  `notes-export --verbose` stderr line-by-line. A new `sync_progress` key in `_state`
+  tracks `{active, done, total, current, error}`. The sync button updates live
+  (`↻ 42` while exporting, then hands off to the existing index-progress poll); the
+  status label shows "Exported N…" during export and "Scanning / Indexing X / Y" during
+  re-indexing.
+- **`notes-export` binary auto-discovery** — Finder and launchd strip `PATH` to a
+  minimal set, causing `notes-export` not found errors when launching via
+  `Launch Notes.command`. `server.py` now provides `_find_notes_export_bin()` which
+  probes five known locations including the app bundle at
+  `/Applications/Apple Notes Exporter.app/Contents/SharedSupport/notes-export`.
+  `sync.sh` applies the same ordered probe before invoking the binary.
+
+### Fixed
+
+- **Preview pane width cap** — removed the 740 px `max-width` constraint on `.note-body`
+  so wide content (monospace tables, long `<pre>` blocks) fills the content panel.
+  `word-break: break-word` is now scoped to prose elements only (`p`, `li`, headings),
+  preserving fixed-width column alignment in monospace tables.
+- **Exporter-fragmented `<pre>` rendering** — `apple-notes-exporter` wraps every text
+  segment between bold markers in its own `<pre style='background:#f5f5f5'>`, producing
+  one grey monospace box per word or phrase. `renderNote()` Step 5 now collapses
+  consecutive runs: strips `**` delimiters (`<b>**text**</b>` → `<strong>`), converts
+  `##`/`###` prefixes to `<h2>`/`<h3>` headings, collects pipe-table rows into a
+  `<pre class="exporter-table">` block, and converts `- item` lines to `<ul><li>`
+  elements. The result is rendered as a single monospace block matching the intent of
+  the original Apple Notes content.
+
+---
+
 ## [2.3.0] 16-05-2026
 
 ### Added
