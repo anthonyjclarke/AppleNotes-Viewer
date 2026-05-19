@@ -4,7 +4,7 @@
 
 Local single-page web app for browsing and searching Apple Notes exports produced by
 [`apple-notes-exporter`](https://github.com/kzaremski/apple-notes-exporter) CLI.
-v2.4.8 — Python 3 stdlib only, no framework, no build step.
+v2.4.9 — Python 3 stdlib only, no framework, no build step.
 
 ---
 
@@ -136,16 +136,20 @@ in sidebar footer re-opens the report at any time. `window._syncLog` exposes the
 `onclick` is set dynamically in the syncBtn handler for each sync run.
 
 **Exporter is additive — we prune orphans** — `notes-export` has no clean/mirror
-flag; replacing or removing a note's attachment leaves the old file behind. After every
-successful export `_prune_orphan_attachments()` scans every `(Attachments)/` dir on disk,
-parses `href`/`src` attributes in the corresponding note HTML (NOT `attachmentPaths` from
-the watermark — that field is NOT cleared by the exporter when attachments are removed,
-making it unreliable for detection), and deletes unreferenced files. Watermark is used
-ONLY for the consistency gate (<75% notes present → abort). Fail-safe: no HTML on disk →
-skip folder; HTML > 10 MB → skip folder; only regular files directly inside
-`* (Attachments)/` ever deleted. `_HREF_SRC_RE` regex finds all href/src attrs;
-`_referenced_attachments()` resolves them relative to the HTML and returns the set of
-filenames in att_dir (None = too large / error → caller skips that folder).
+flag; replacing or removing a note's **non-image** attachment leaves the old file behind.
+After every successful export `_prune_orphan_attachments()` scans every `(Attachments)/`
+dir on disk, parses `href`/`src` attributes in the corresponding note HTML, and deletes
+unreferenced **non-image** files. Three critical guards prevent false deletions:
+(1) `_IMAGE_EXTS` — image files (`.png`, `.jpg`, `.jpeg`, `.gif`, `.heic`, `.heif`,
+`.tiff`, `.tif`, `.bmp`, `.webp`, `.svg`, `.avif`) are NEVER deleted. The exporter
+dual-writes images: base64 inline in the HTML AND a raw copy in `(Attachments)/`. The raw
+copy is never referenced by path, so it would always appear orphaned without this guard.
+(2) `if not referenced: continue` — if the HTML has zero path-references into the
+`(Attachments)/` folder, skip it entirely. Either all content is base64 (nothing to clean)
+or the HTML is a stale pre-rename copy (wrong match). (3) mtime guard — non-referenced
+files newer than the HTML are skipped; the HTML predates them and cannot be authoritative.
+Watermark used ONLY for the consistency gate (<75% notes present → abort). Never remove
+these guards — each one fixes a real false-deletion class.
 
 ---
 

@@ -27,6 +27,43 @@
 
 ---
 
+## [2.4.9] 20-05-2026
+
+### Fixed
+
+- **Attachment cleanup wrongly deleted current image files on every sync** — a
+  fundamental design flaw in `_prune_orphan_attachments`. Three compounding causes:
+
+  **1. Exporter dual-writes images.** For every image attachment, `notes-export`
+  embeds the image as base64 (`<img src="data:image/png;base64,…">`) in the HTML AND
+  copies the raw file to the `(Attachments)` folder. The HTML never references the raw
+  file by path. Our cleanup read the HTML, found no `href`/`src` pointing to the file,
+  and concluded it was an orphan — deleting it on every sync, only for the exporter to
+  recreate it on the next. Fixed with `_IMAGE_EXTS`: files with image extensions
+  (`.png`, `.jpg`, `.jpeg`, `.gif`, `.heic`, `.heif`, `.tiff`, `.tif`, `.bmp`,
+  `.webp`, `.svg`, `.avif`) are now unconditionally skipped. The exporter's raw image
+  copies are never touched.
+
+  **2. Stale HTML stem-mismatch.** When a note title changes (e.g. `Pathology Report`
+  → `Pathology Report #health`), the exporter writes a new HTML file under the new
+  name but leaves the old `Pathology Report.html` on disk. Our cleanup matched the
+  `Pathology Report (Attachments)` folder to the old stale HTML by stem. The stale
+  HTML did not reference the new PDFs in the folder, so they appeared orphaned. Fixed
+  by skipping a folder entirely when the matched HTML has zero path-references into it
+  (`if not referenced: continue`): if the HTML doesn't reference a single file in the
+  folder by path, it is either all-base64 or the wrong HTML — nothing is safe to delete.
+
+  **3. Files newer than the HTML.** If any candidate file in an `(Attachments)` folder
+  was created or modified *after* the HTML was written, the HTML predates the file and
+  cannot possibly reference it. Deleting it would be wrong. Fixed by skipping
+  non-referenced files whose `mtime` is newer than the HTML's `mtime`.
+
+  Together these three guards make cleanup conservative: only non-image files, in
+  folders the HTML actively references, whose files are older than the HTML, are
+  considered orphans. PDFs removed from a note are still cleaned up correctly.
+
+---
+
 ## [2.4.8] 20-05-2026
 
 ### Fixed

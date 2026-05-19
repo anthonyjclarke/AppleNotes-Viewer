@@ -303,6 +303,14 @@ _DATE_PREFIX_STRIP    = re.compile(r'^\d{4}-\d{2}-\d{2} ')
 _HREF_SRC_RE          = re.compile(r'''(?:href|src)\s*=\s*["']([^"']+)["']''', re.IGNORECASE)
 _PROGRESS_COUNTER_RE  = re.compile(r'^\[\d+/\d+\]$')   # exporter progress lines e.g. [3/7]
 
+# Image file extensions the exporter ALWAYS stores in (Attachments) as raw copies
+# of inline base64 content — the HTML uses data: URIs, never path hrefs, so these
+# files will never appear in `referenced`. Never delete them.
+_IMAGE_EXTS = frozenset({
+    ".png", ".jpg", ".jpeg", ".gif", ".heic", ".heif",
+    ".tiff", ".tif", ".bmp", ".webp", ".svg", ".avif",
+})
+
 
 def _fmt_size(n: int) -> str:
     """Human-readable byte size for log lines (e.g. 1.4 MB, 812 KB)."""
@@ -460,11 +468,39 @@ def _prune_orphan_attachments(notes_root: Path) -> dict:
             if referenced is None:
                 continue   # file too large to read; leave folder untouched
 
+            # Guard 1: if the HTML has zero path-references into this folder,
+            # skip it entirely. Either all attachments are base64-embedded (no
+            # files to clean up) or the HTML is the wrong match for this folder
+            # (a stale copy from before the note was renamed). Either way, nothing
+            # safe to delete.
+            if not referenced:
+                continue
+
             folders_scanned += 1
             note_title = _DATE_PREFIX_STRIP.sub("", stem)
+            html_mtime = html_path.stat().st_mtime
+
             for child in att_dir.iterdir():
                 if not child.is_file() or child.name in referenced:
                     continue
+
+                # Guard 2: never delete image files. The exporter always writes
+                # raw image copies to (Attachments) even when it embeds them as
+                # base64 data: URIs in the HTML. They appear unreferenced but
+                # are perfectly current.
+                if child.suffix.lower() in _IMAGE_EXTS:
+                    continue
+
+                # Guard 3: if this file is newer than the HTML, the HTML was
+                # written before the file existed — it can't reference it. The
+                # HTML is stale (e.g. a pre-rename copy) and we must not trust
+                # it as the authoritative reference list for newer files.
+                try:
+                    if child.stat().st_mtime > html_mtime:
+                        continue
+                except Exception:
+                    continue
+
                 try:
                     sz = child.stat().st_size
                     child.unlink()
