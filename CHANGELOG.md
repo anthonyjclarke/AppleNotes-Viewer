@@ -27,6 +27,36 @@
 
 ---
 
+## [2.4.4] 19-05-2026
+
+### Fixed
+
+- **Orphan attachment cleanup missed removed attachments** — when a PDF or image was
+  deleted from a note in Apple Notes and the note was re-synced, the old file was not
+  removed from the `(Attachments)/` folder. Root cause: `_prune_orphan_attachments`
+  relied on the watermark's `attachmentPaths` field to determine which files were
+  still expected — but the exporter does NOT clear that field when an attachment is
+  removed; it only ever adds to it. The old path remained in `attachmentPaths`, so the
+  cleanup treated the file as "expected" and skipped it.
+
+  Fixed by switching orphan detection from watermark-based to **HTML-parsing-based**:
+  instead of trusting `attachmentPaths`, the function now scans every `(Attachments)/`
+  directory on disk, parses `href` and `src` attributes in the corresponding note HTML
+  (the re-exported, current version), and deletes any file the HTML no longer references.
+  The watermark is still used for the consistency gate but no longer drives per-file
+  detection. This correctly handles removing one attachment (others remain), removing all
+  attachments, and replacing an image.
+
+  Fail-safes preserved: no corresponding HTML → skip that folder; HTML > 10 MB (large
+  inline base64 images) → skip; only regular files directly inside `(Attachments)/` ever
+  deleted.
+
+- **`notes-export --verbose` format confirmed from live output** — the exporter emits
+  `✓ Exported: <title> [done/total]` per note and a header line `Incremental sync: N
+  new/changed of M total`. Previously treated as unverified freeform.
+
+---
+
 ## [2.4.3] 19-05-2026
 
 ### Added

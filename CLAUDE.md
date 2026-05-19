@@ -4,7 +4,7 @@
 
 Local single-page web app for browsing and searching Apple Notes exports produced by
 [`apple-notes-exporter`](https://github.com/kzaremski/apple-notes-exporter) CLI.
-v2.4.3 — Python 3 stdlib only, no framework, no build step.
+v2.4.4 — Python 3 stdlib only, no framework, no build step.
 
 ---
 
@@ -123,12 +123,16 @@ in sidebar footer re-opens the report at any time. `window._syncLog` exposes the
 `onclick` is set dynamically in the syncBtn handler for each sync run.
 
 **Exporter is additive — we prune orphans** — `notes-export` has no clean/mirror
-flag; replacing a note's image leaves the old attachment file behind forever (and
-deleted notes leave stale folders). After every successful export
-`_prune_orphan_attachments()` deletes files not in that note's `attachmentPaths` in
-the freshly-written watermark. Fail-safe: no watermark / no matching entry / paths
-that don't resolve into the folder → that folder is skipped; only regular files
-directly inside a `* (Attachments)` dir are ever deleted.
+flag; replacing or removing a note's attachment leaves the old file behind. After every
+successful export `_prune_orphan_attachments()` scans every `(Attachments)/` dir on disk,
+parses `href`/`src` attributes in the corresponding note HTML (NOT `attachmentPaths` from
+the watermark — that field is NOT cleared by the exporter when attachments are removed,
+making it unreliable for detection), and deletes unreferenced files. Watermark is used
+ONLY for the consistency gate (<75% notes present → abort). Fail-safe: no HTML on disk →
+skip folder; HTML > 10 MB → skip folder; only regular files directly inside
+`* (Attachments)/` ever deleted. `_HREF_SRC_RE` regex finds all href/src attrs;
+`_referenced_attachments()` resolves them relative to the HTML and returns the set of
+filenames in att_dir (None = too large / error → caller skips that folder).
 
 ---
 

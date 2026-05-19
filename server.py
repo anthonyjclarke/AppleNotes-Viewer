@@ -299,31 +299,62 @@ def _count_notes_for_progress(bin_path: str) -> int:
 
 
 _DATE_PREFIX_STRIP = re.compile(r'^\d{4}-\d{2}-\d{2} ')
+_HREF_SRC_RE       = re.compile(r'''(?:href|src)\s*=\s*["']([^"']+)["']''', re.IGNORECASE)
+
+
+def _referenced_attachments(html_path: Path, att_dir: Path) -> "set[str] | None":
+    """Return the set of filenames inside att_dir that the note HTML references.
+
+    Parses href/src attributes in the exported HTML and resolves them relative
+    to the HTML file's directory. Only names whose resolved parent equals att_dir
+    are included. Returns None when the file is too large to read safely (caller
+    should leave the folder untouched). Never raises.
+    """
+    try:
+        if html_path.stat().st_size > 10 * 1024 * 1024:
+            return None   # base64-image-heavy notes; skip rather than read 10 MB
+        text = html_path.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return None
+
+    referenced: set[str] = set()
+    att_abs  = att_dir.resolve()
+    html_dir = html_path.parent
+    for m in _HREF_SRC_RE.finditer(text):
+        raw = m.group(1)
+        if not raw or raw.startswith(("data:", "http:", "https:", "#")):
+            continue
+        for candidate in (raw, unquote(raw)):
+            try:
+                p = (html_dir / candidate).resolve()
+                if p.parent == att_abs:
+                    referenced.add(p.name)
+                    break
+            except Exception:
+                pass
+    return referenced
 
 
 def _prune_orphan_attachments(notes_root: Path) -> dict:
-    """Delete attachment files left behind when a note's image is replaced.
+    """Delete attachment files left behind when a note's attachments change.
 
-    notes-export is additive at the file level: editing a note to swap an image
-    re-exports the note HTML and writes the NEW attachment, but never removes the
-    OLD file from the note's "(Attachments)/" folder. The same applies when a note
-    loses all its attachments, or is deleted in Apple Notes.
+    notes-export is additive: editing a note to swap or remove an attachment
+    re-exports the HTML but leaves the old file in the note's
+    "(Attachments)/" folder. This function finds those orphans and removes them.
 
-    The export watermark (AppleNotesExportSyncWatermark.json) records, per note,
-    the exact attachment paths from the most recent export — i.e. the *current*
-    set. Any file in a note's attachments folder not in that note's
-    `attachmentPaths` is a stale orphan and is removed.
+    Detection strategy — parse the re-exported HTML, not the watermark:
+    The watermark's `attachmentPaths` field is NOT cleared when an attachment
+    is removed from a note; it accumulates paths across exports. Trusting it
+    would cause us to keep files the note no longer references. Instead, we
+    scan every "(Attachments)/" directory on disk, find its note's HTML,
+    and delete any file the HTML does not reference. The HTML is the definitive
+    source of truth for what the note currently contains.
 
     Fail-safe by design:
-      - missing / unreadable watermark            -> do nothing
-      - a "* (Attachments)" folder with no
-        matching watermark entry                  -> left untouched (covers stray
-                                                     dirs and the date-prefix vs
-                                                     no-prefix duplicate case)
-      - watermark lists attachments but none
-        resolve into the folder we're about to
-        prune                                     -> skip that folder (our path
-                                                     assumption may not hold)
+      - watermark missing/unreadable              → consistency gate fails → no-op
+      - no corresponding HTML on disk             → skip that folder (note deleted
+                                                    from Apple Notes; conservative)
+      - HTML file > 10 MB (large base64 images)  → skip that folder (too slow)
       - only regular files directly inside a
         "* (Attachments)" folder are ever
         deleted; note HTML, sibling folders and
@@ -340,6 +371,8 @@ def _prune_orphan_attachments(notes_root: Path) -> dict:
         "skipped":       False,
         "skip_reason":   None,
     }
+
+    # Watermark is used ONLY for the consistency gate — not for per-file detection.
     wm = notes_root / "AppleNotesExportSyncWatermark.json"
     try:
         entries = json.loads(wm.read_text(encoding="utf-8")).get("notes", {})
@@ -349,8 +382,7 @@ def _prune_orphan_attachments(notes_root: Path) -> dict:
     # Consistency gate: if the export folder is grossly out of sync with its own
     # manifest (interrupted export, external deletion, a cloud-sync tool like
     # Syncthing/Dropbox/iCloud propagating deletes into the folder), do NOT run
-    # any cleanup — pruning against a half-present tree is pointless and could
-    # compound damage. Require that most watermarked notes still exist on disk.
+    # any cleanup. Require that most watermarked notes still exist on disk.
     present = 0
     for entry in entries.values():
         ep = entry.get("exportedPath", "") or ""
@@ -367,32 +399,29 @@ def _prune_orphan_attachments(notes_root: Path) -> dict:
             _state["sync_progress"]["current"] = reason
         return result
 
-    for entry in entries.values():
+    # Scan every "(Attachments)" directory on disk. For each one, parse the
+    # corresponding note HTML to find which files it actually references.
+    # Anything not referenced in the HTML is an orphan and can be safely removed.
+    suffix = " (Attachments)"
+    for att_dir in notes_root.rglob("* (Attachments)"):
+        if not att_dir.is_dir():
+            continue
         try:
-            exported = entry.get("exportedPath", "") or ""
-            if not exported.endswith(".html"):
-                continue
-            att_dir = notes_root / (exported[:-5] + " (Attachments)")
-            if not att_dir.is_dir():
-                continue
-
-            aps = entry.get("attachmentPaths", []) or []
-            expected, matched = set(), False
-            for ap in aps:
-                p = notes_root / ap
-                if p.parent == att_dir:
-                    expected.add(p.name)
-                    matched = True
-            # attachmentPaths present but none map into this folder → our
-            # path assumption is off; do not risk deleting live files.
-            if aps and not matched:
+            stem      = att_dir.name[:-len(suffix)]
+            html_path = att_dir.parent / (stem + ".html")
+            if not html_path.is_file():
+                # The note was deleted from Apple Notes; the HTML is gone but
+                # the folder remains. Leave it alone — the note may still exist
+                # in Apple Notes and a future sync might recreate the HTML.
                 continue
 
-            # Derive a clean display title for the sync log report.
-            note_title = _DATE_PREFIX_STRIP.sub("", Path(exported).stem)
+            referenced = _referenced_attachments(html_path, att_dir)
+            if referenced is None:
+                continue   # file too large to read; leave folder untouched
 
+            note_title = _DATE_PREFIX_STRIP.sub("", stem)
             for child in att_dir.iterdir():
-                if not child.is_file() or child.name in expected:
+                if not child.is_file() or child.name in referenced:
                     continue
                 try:
                     sz = child.stat().st_size
