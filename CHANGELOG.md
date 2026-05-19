@@ -31,25 +31,39 @@
 
 ### Added
 
-- **Sync Report modal** — after every sync a "Sync Report" popup opens automatically
-  and is also accessible via the **Log** button in the sidebar footer at any time.
-  The report shows three phase cards (Export, Attachment cleanup, Re-index), each with
-  a status icon, duration, and context-specific detail:
-  - **Export** — type (Full / Incremental), filename scheme in use, line count from
-    the exporter's verbose output
-  - **Attachment cleanup** — files removed with a per-file table (Note · Filename ·
-    Size), bytes freed, or "No orphaned attachment files"; warning card if the
-    consistency gate tripped
-  - **Re-index** — notes indexed and duration
+- **Live Sync Report modal** — the Sync Report modal opens *immediately* when ↻ Sync
+  is clicked and shows the sync running in real time; transitions to a full structured
+  report when complete, then pauses for user confirmation before refreshing the note
+  list. Also re-openable at any time via the **Log** button in the sidebar footer.
+
+  **Live phase** (while running):
+  - Title "Syncing…" with a pulsing ● Live badge
+  - Progress bar and status line — % and count for full export, honest indeterminate
+    for incremental
+  - Scrolling **Live output** pane streaming the last 50 lines of `notes-export`
+    verbose stderr in real time, auto-scrolled to the most recent line
+  - × close button disabled while syncing — user cannot accidentally dismiss mid-run
+
+  **Re-index phase**: title transitions to "Re-indexing…" with live count progress
+
+  **Report phase** (when complete):
+  - ✓ Done badge replaces ● Live
+  - Three phase cards with status icons and timings:
+    - **Export** — Full/Incremental, filename scheme, exporter output line count
+    - **Attachment cleanup** — per-file table (Note · Filename · Size) with bytes
+      freed, "No orphaned files", or ⚠ warning if consistency gate tripped
+    - **Re-index** — notes indexed and duration
   - **Total elapsed time** across all phases
-  - Collapsible **Exporter output** section — full raw stderr from `notes-export`,
-    scrollable, capped at last 500 lines; line count shown in summary header
-- **`GET /api/sync-log`** — new endpoint returns the structured log dict for the
-  last completed sync; powers the modal and persists for the server session
-- **`_prune_orphan_attachments` returns rich dict** — previously returned `(int, int)`;
-  now returns `{files_removed, bytes_freed, items:[{note,file,size}], skipped,
-  skip_reason}` so the sync report can show a per-file cleanup table
-- **`import time`** added to `server.py` — used for `time.monotonic()` phase timing
+  - Collapsible **Exporter output** — full raw stderr, last 500 lines, scrollable
+  - **Done — return to notes** button — user explicitly confirms; only then does the
+    note list refresh (loadFolders / loadTags / loadNoteList)
+
+- **`GET /api/sync`** now returns `live_lines` — last 50 stderr lines from the running
+  export for the modal's live output pane (server caps accumulation at 1000 lines)
+- **`GET /api/sync-log`** — structured log dict for the last completed sync
+- **`_prune_orphan_attachments` returns rich dict** — previously `(int, int)`;
+  now `{files_removed, bytes_freed, items:[{note,file,size}], skipped, skip_reason}`
+- **`import time`** added to `server.py` for `time.monotonic()` phase timing
 
 ---
 

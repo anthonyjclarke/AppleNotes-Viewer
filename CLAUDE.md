@@ -108,10 +108,19 @@ across all phases: `{timestamp, type, scheme, export:{duration_s, stderr_lines[-
 stderr_total, exit_code, error}, cleanup:{files_removed, bytes_freed, items:[{note,file,
 size}], skipped, skip_reason}, reindex:{notes_indexed, duration_s}, total_duration_s}`.
 `_wait_for_reindex` thread writes the final log once `index_progress.active` goes False.
-Served by `GET /api/sync-log`; powers the Sync Report modal that auto-opens after each
-sync and is re-openable via the **Log** button in the sidebar footer.
-`_prune_orphan_attachments` returns a dict (not tuple) with `items` per deleted file so
-the modal can display a per-note × per-file cleanup table.
+Served by `GET /api/sync-log`; powers the Sync Report modal. `GET /api/sync` also
+returns `live_lines` — last 50 of `sync_progress["lines"]` — for the live output pane.
+`sync_progress["lines"]` accumulates stderr lines in-memory (capped at 1000; last 800
+kept when trimmed). `_prune_orphan_attachments` returns a dict (not tuple) with `items`
+per deleted file so the modal can show a per-note × per-file cleanup table.
+
+**Sync Report modal flow** — opens *at sync start* in live mode (× disabled); transitions
+to re-index mode when export completes; transitions to report mode (full phase cards) when
+done; then blocks on "Done — return to notes" button before calling loadFolders/loadTags/
+loadNoteList. This ensures the user sees what changed before the list refreshes. Log button
+in sidebar footer re-opens the report at any time. `window._syncLog` exposes the API:
+`{openLive, updateLive, updateReindex, showReport, showError}`. The Done button's
+`onclick` is set dynamically in the syncBtn handler for each sync run.
 
 **Exporter is additive — we prune orphans** — `notes-export` has no clean/mirror
 flag; replacing a note's image leaves the old attachment file behind forever (and

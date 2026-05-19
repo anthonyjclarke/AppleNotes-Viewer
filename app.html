@@ -998,6 +998,89 @@
       white-space: pre-wrap;
       word-break: break-all;
     }
+    /* Live progress bar inside modal (not tied to .sync-footer) */
+    .synclog-modal-bar {
+      height: 4px;
+      background: var(--bg-search);
+      border-radius: 2px;
+      margin: 10px 0 0;
+      overflow: hidden;
+      display: block;
+    }
+    .synclog-modal-bar-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 2px;
+      width: 0%;
+      transition: width 0.25s ease;
+    }
+    .synclog-modal-bar-fill.indet {
+      width: 40%;
+      animation: scan-sweep 1.4s ease-in-out infinite;
+    }
+    .synclog-live-status {
+      font-size: 12px;
+      color: var(--tx-secondary);
+      margin: 8px 0 0;
+      min-height: 18px;
+      font-variant-numeric: tabular-nums;
+    }
+    .synclog-live-label {
+      font-size: 10.5px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--tx-tertiary);
+      margin: 16px 0 6px;
+    }
+    .synclog-live-pre {
+      max-height: 280px;
+      /* grows taller — full report section collapses this */
+    }
+    .synclog-title-row {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      margin-bottom: 2px;
+    }
+    .synclog-badge {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      padding: 2px 7px;
+      border-radius: 10px;
+      vertical-align: middle;
+    }
+    .synclog-badge.live {
+      background: #FF3B3022;
+      color: #FF3B30;
+      animation: synclog-pulse 1.4s ease-in-out infinite;
+    }
+    .synclog-badge.done { background: #34C75922; color: #34C759; }
+    @keyframes synclog-pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.4; }
+    }
+    .synclog-done-row {
+      margin-top: 20px;
+      display: flex;
+      justify-content: flex-end;
+    }
+    .synclog-done-btn {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      padding: 10px 22px;
+      transition: opacity 0.15s;
+    }
+    [data-theme="dark"] .synclog-done-btn { color: #1C1C1E; }
+    .synclog-done-btn:hover { opacity: 0.85; }
+    .synclog-close-disabled { pointer-events: none; opacity: 0.3; }
     .synclog-btn {
       background: none;
       border: 1px solid var(--divider);
@@ -1222,23 +1305,44 @@
 
 <!-- ── Sync log modal ────────────────────────────────────────────── -->
 <div class="about-overlay" id="syncLogOverlay">
-  <div class="synclog-modal" role="dialog" aria-modal="true" aria-labelledby="syncLogTitle">
-    <button class="about-close" id="syncLogClose" title="Close">✕</button>
+  <div class="synclog-modal" role="dialog" aria-modal="true" aria-labelledby="syncLogLiveTitle">
+    <button class="about-close synclog-close-disabled" id="syncLogClose" title="Close">✕</button>
 
-    <div class="about-title" id="syncLogTitle">Sync Report</div>
-    <div class="synclog-meta" id="syncLogMeta">—</div>
+    <!-- ── Live section — shown while sync is running ── -->
+    <div id="syncLogLiveSection">
+      <div class="synclog-title-row">
+        <div class="about-title" id="syncLogLiveTitle">Sync Report</div>
+        <span class="synclog-badge live" id="syncLogBadge">● Live</span>
+      </div>
+      <div class="synclog-meta" id="syncLogLiveMeta">—</div>
 
-    <!-- Phase rows: Export, Cleanup, Re-index — populated by JS -->
-    <div id="syncLogBody"></div>
+      <div class="synclog-modal-bar" id="syncLogModalBar">
+        <div class="synclog-modal-bar-fill indet" id="syncLogModalBarFill"></div>
+      </div>
+      <div class="synclog-live-status" id="syncLogLiveStatus">Starting…</div>
 
-    <hr class="synclog-divider">
-    <div class="synclog-total" id="syncLogTotal"></div>
+      <div class="synclog-live-label">Live output</div>
+      <pre class="synclog-pre synclog-live-pre" id="syncLogLivePre">(waiting for exporter…)</pre>
+    </div>
 
-    <!-- Raw exporter stderr — collapsible -->
-    <details class="synclog-details" id="syncLogDetails">
-      <summary class="synclog-details-sum" id="syncLogDetailsSummary">Exporter output</summary>
-      <pre class="synclog-pre" id="syncLogPre"></pre>
-    </details>
+    <!-- ── Report section — shown once complete ── -->
+    <div id="syncLogReportSection" hidden>
+      <div class="synclog-meta" id="syncLogMeta">—</div>
+      <!-- Phase cards populated by JS -->
+      <div id="syncLogBody"></div>
+      <hr class="synclog-divider">
+      <div class="synclog-total" id="syncLogTotal"></div>
+      <!-- Collapsible raw output -->
+      <details class="synclog-details" id="syncLogDetails">
+        <summary class="synclog-details-sum" id="syncLogDetailsSummary">Exporter output</summary>
+        <pre class="synclog-pre" id="syncLogPre"></pre>
+      </details>
+    </div>
+
+    <!-- ── Done button — shown when complete, user must confirm ── -->
+    <div class="synclog-done-row" id="syncLogDoneRow" hidden>
+      <button class="synclog-done-btn" id="syncLogDoneBtn">Done — return to notes</button>
+    </div>
   </div>
 </div>
 
@@ -1909,16 +2013,22 @@ document.getElementById("settingsBtn").addEventListener("click", () => {
 
 /* ── Sync Log modal ─────────────────────────────────────────────────── */
 (function () {
-  const overlay = document.getElementById("syncLogOverlay");
-  const logBtn  = document.getElementById("syncLogBtn");
-  const close   = () => overlay.classList.remove("open");
+  // DOM refs
+  const overlay      = document.getElementById("syncLogOverlay");
+  const closeBtn     = document.getElementById("syncLogClose");
+  const liveSection  = document.getElementById("syncLogLiveSection");
+  const reportSec    = document.getElementById("syncLogReportSection");
+  const doneRow      = document.getElementById("syncLogDoneRow");
+  const doneBtn      = document.getElementById("syncLogDoneBtn");
+  const badge        = document.getElementById("syncLogBadge");
+  const liveTitle    = document.getElementById("syncLogLiveTitle");
+  const liveMeta     = document.getElementById("syncLogLiveMeta");
+  const liveStatus   = document.getElementById("syncLogLiveStatus");
+  const livePre      = document.getElementById("syncLogLivePre");
+  const barFill      = document.getElementById("syncLogModalBarFill");
+  const logBtn       = document.getElementById("syncLogBtn");
 
-  document.getElementById("syncLogClose").addEventListener("click", close);
-  overlay.addEventListener("click", e => { if (e.target === overlay) close(); });
-  document.addEventListener("keydown", e => {
-    if (e.key === "Escape" && overlay.classList.contains("open")) close();
-  });
-
+  // ── Helpers ───────────────────────────────────────────────────────
   function fmtDur(s) {
     if (!s || s < 1) return "< 1s";
     if (s < 60)      return s + "s";
@@ -1937,20 +2047,80 @@ document.getElementById("settingsBtn").addEventListener("click", () => {
       });
     } catch { return iso || "—"; }
   }
+  function setBar(pct /* null = indeterminate */) {
+    if (pct === null) { barFill.classList.add("indet"); }
+    else {
+      barFill.classList.remove("indet");
+      barFill.style.width = Math.max(0, Math.min(100, pct)) + "%";
+    }
+  }
+  function resetBar() { barFill.classList.remove("indet"); barFill.style.width = "0%"; }
 
+  // ── Live mode — opens when sync starts ───────────────────────────
+  function openLive(metaText) {
+    liveSection.hidden  = false;
+    reportSec.hidden    = true;
+    doneRow.hidden      = true;
+    closeBtn.classList.add("synclog-close-disabled");
+    badge.className     = "synclog-badge live";
+    badge.textContent   = "● Live";
+    liveTitle.textContent = "Syncing…";
+    liveMeta.textContent  = metaText || "—";
+    liveStatus.textContent = "Starting…";
+    livePre.textContent    = "(waiting for exporter…)";
+    resetBar(); setBar(null);
+    overlay.classList.add("open");
+  }
+
+  // Update live view on each poll tick
+  function updateLive(p, liveLines) {
+    // Append new lines from the server tail
+    if (liveLines && liveLines.length) {
+      livePre.textContent = liveLines.join("\n");
+      livePre.scrollTop   = livePre.scrollHeight;
+    }
+    const cur = p.current || "";
+    if (cur.startsWith("Existing notes")) {
+      setBar(null); liveStatus.textContent = cur;
+    } else if (cur.startsWith("Cleaning up") || cur.startsWith("Removed ")
+               || cur.startsWith("Attachment cleanup") || cur.startsWith("No orphaned")) {
+      setBar(null); liveStatus.textContent = cur;
+    } else if (p.total > 0) {
+      const shown = Math.min(p.done, p.total);
+      const pct   = Math.round(shown / p.total * 100);
+      setBar(pct);
+      liveStatus.textContent =
+        `Exporting — ${pct}% (${shown.toLocaleString()} / ${p.total.toLocaleString()})`;
+    } else {
+      setBar(null);
+      liveStatus.textContent = "Exporting changed notes…";
+    }
+  }
+
+  // Transition to re-index phase
+  function updateReindex(d) {
+    liveTitle.textContent = "Re-indexing…";
+    if (d.total === 0) {
+      setBar(null); liveStatus.textContent = "Scanning notes folder…";
+    } else {
+      const pct = Math.round(d.done / d.total * 100);
+      setBar(pct);
+      liveStatus.textContent =
+        `Re-indexing ${d.done.toLocaleString()} / ${d.total.toLocaleString()} notes`;
+    }
+  }
+
+  // ── Report mode — replaces live section when done ────────────────
   function renderSyncLog(log) {
-    // Header meta
     const typeLabel   = log.type === "full" ? "Full export" : "Incremental sync";
     const schemeLabel = log.scheme === "date_prefix"
-      ? "Date-prefixed filenames (YYYY-MM-DD)"
-      : "No date prefix";
+      ? "Date-prefixed filenames (YYYY-MM-DD)" : "No date prefix";
     document.getElementById("syncLogMeta").textContent =
       fmtDate(log.timestamp) + "  ·  " + typeLabel + "  ·  " + schemeLabel;
 
     const body = document.getElementById("syncLogBody");
     body.innerHTML = "";
 
-    // Helper: append one phase card
     function addPhase(iconClass, iconChar, label, duration, detailHTML) {
       const card = document.createElement("div");
       card.className = "synclog-phase";
@@ -1964,36 +2134,32 @@ document.getElementById("settingsBtn").addEventListener("click", () => {
       body.appendChild(card);
     }
 
-    // ── Export phase ─────────────────────────────────────────────────
+    // Export phase
     const ex = log.export || {};
     if (ex.error) {
       addPhase("fail", "✗", "Export", fmtDur(ex.duration_s || 0),
         `<span class="synclog-err">${ex.error}</span>`);
     } else {
-      const total = ex.stderr_total || 0;
-      const capped = (ex.stderr_lines || []).length;
-      const lineNote = total > capped
-        ? `${total.toLocaleString()} output lines (last ${capped} shown below)`
-        : `${total.toLocaleString()} output line${total !== 1 ? "s" : ""} from exporter`;
-      addPhase("ok", "✓", "Export", fmtDur(ex.duration_s || 0), lineNote);
+      const ttl = ex.stderr_total || 0;
+      const cap = (ex.stderr_lines || []).length;
+      const note = ttl > cap
+        ? `${ttl.toLocaleString()} output lines (last ${cap} shown below)`
+        : `${ttl.toLocaleString()} output line${ttl !== 1 ? "s" : ""} from exporter`;
+      addPhase("ok", "✓", "Export", fmtDur(ex.duration_s || 0), note);
     }
 
-    // ── Cleanup phase ────────────────────────────────────────────────
+    // Cleanup phase
     const cl = log.cleanup || {};
     if (cl.skipped) {
       addPhase("warn", "⚠", "Attachment cleanup", "—",
         `<span class="synclog-warn">${cl.skip_reason || "Skipped"}</span>`);
     } else if ((cl.files_removed || 0) > 0) {
-      const n = cl.files_removed;
-      const b = cl.bytes_freed || 0;
+      const n = cl.files_removed, b = cl.bytes_freed || 0;
       let detail = `<div class="synclog-cleanup-summary">${n} orphaned file${n !== 1 ? "s" : ""} removed — ${fmtBytes(b)} freed</div>`;
-      const items = cl.items || [];
-      if (items.length > 0) {
+      if ((cl.items || []).length > 0) {
         detail += `<div class="synclog-file-table">
-          <div class="synclog-file-hd">
-            <span>Note</span><span>File</span><span>Size</span>
-          </div>`;
-        for (const it of items) {
+          <div class="synclog-file-hd"><span>Note</span><span>File</span><span>Size</span></div>`;
+        for (const it of cl.items) {
           detail += `<div class="synclog-file-row">
             <span title="${it.note}">${it.note}</span>
             <span title="${it.file}">${it.file}</span>
@@ -2007,49 +2173,87 @@ document.getElementById("settingsBtn").addEventListener("click", () => {
       addPhase("ok", "✓", "Attachment cleanup", "—", "No orphaned attachment files");
     }
 
-    // ── Re-index phase ───────────────────────────────────────────────
+    // Re-index phase
     const ri = log.reindex || {};
-    const noteCount = (ri.notes_indexed || 0).toLocaleString();
     addPhase("ok", "✓", "Re-index", fmtDur(ri.duration_s || 0),
-      `${noteCount} note${ri.notes_indexed !== 1 ? "s" : ""} indexed`);
+      `${(ri.notes_indexed || 0).toLocaleString()} note${ri.notes_indexed !== 1 ? "s" : ""} indexed`);
 
-    // ── Total ────────────────────────────────────────────────────────
+    // Total
     document.getElementById("syncLogTotal").textContent =
       "Total: " + fmtDur(log.total_duration_s || 0);
 
-    // ── Raw exporter output ──────────────────────────────────────────
-    const lines  = ex.stderr_lines || [];
-    const sumEl  = document.getElementById("syncLogDetailsSummary");
-    const ttl    = ex.stderr_total || 0;
-    sumEl.textContent = ttl > lines.length
-      ? `Exporter output — ${ttl.toLocaleString()} lines (last ${lines.length} shown)`
-      : `Exporter output — ${ttl.toLocaleString()} line${ttl !== 1 ? "s" : ""}`;
+    // Raw output (collapsible)
+    const lines = ex.stderr_lines || [];
+    const ttl2  = ex.stderr_total || 0;
+    document.getElementById("syncLogDetailsSummary").textContent = ttl2 > lines.length
+      ? `Exporter output — ${ttl2.toLocaleString()} lines (last ${lines.length} shown)`
+      : `Exporter output — ${ttl2.toLocaleString()} line${ttl2 !== 1 ? "s" : ""}`;
     document.getElementById("syncLogPre").textContent =
       lines.length ? lines.join("\n") : "(no output captured)";
     document.getElementById("syncLogDetails").removeAttribute("open");
   }
 
-  async function openSyncLog() {
+  function showReport(log) {
+    liveSection.hidden = true;
+    reportSec.hidden   = false;
+    doneRow.hidden     = false;
+    badge.className    = "synclog-badge done";
+    badge.textContent  = "✓ Done";
+    liveTitle.textContent = "Sync Report";
+    closeBtn.classList.remove("synclog-close-disabled");
+    renderSyncLog(log);
+  }
+
+  function showError(msg) {
+    setBar(null);
+    liveTitle.textContent  = "Sync failed";
+    liveStatus.textContent = msg;
+    badge.className        = "synclog-badge fail";
+    badge.textContent      = "✗ Error";
+    doneRow.hidden         = false;
+    doneBtn.textContent    = "Close";
+    closeBtn.classList.remove("synclog-close-disabled");
+  }
+
+  // ── Open report from Log button (post-sync re-open) ───────────────
+  async function openReport() {
     try {
-      const r = await fetch("/api/sync-log");
+      const r   = await fetch("/api/sync-log");
       const log = await r.json();
       if (!log || log.available === false) return;
+      liveSection.hidden = true;
+      reportSec.hidden   = false;
+      doneRow.hidden     = false;
+      badge.className    = "synclog-badge done";
+      badge.textContent  = "✓ Done";
+      liveTitle.textContent = "Sync Report";
+      closeBtn.classList.remove("synclog-close-disabled");
       renderSyncLog(log);
       overlay.classList.add("open");
     } catch { /* silent */ }
   }
 
-  // Log button wires up to open the modal
-  logBtn.addEventListener("click", openSyncLog);
+  // ── Close / dismiss ───────────────────────────────────────────────
+  function tryClose() {
+    if (closeBtn.classList.contains("synclog-close-disabled")) return;
+    overlay.classList.remove("open");
+  }
+  closeBtn.addEventListener("click", tryClose);
+  overlay.addEventListener("click", e => { if (e.target === overlay) tryClose(); });
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && overlay.classList.contains("open")) tryClose();
+  });
 
-  // Called from pollIndexProgress after sync completes
-  window._showSyncLog = () => { logBtn.hidden = false; openSyncLog(); };
+  // ── Expose API for the sync button handler ────────────────────────
+  window._syncLog = { openLive, updateLive, updateReindex, showReport, showError };
 
-  // On load: show the Log button if a prior sync report already exists
+  // ── Log button ────────────────────────────────────────────────────
+  logBtn.addEventListener("click", openReport);
+
+  // Show Log button on load if a prior sync report exists
   (async () => {
     try {
-      const r = await fetch("/api/sync-log");
-      const d = await r.json();
+      const d = await fetch("/api/sync-log").then(r => r.json());
       if (d && d.available !== false) logBtn.hidden = false;
     } catch {}
   })();
@@ -2073,10 +2277,9 @@ async function loadSyncStatus() {
 // --verbose`, NOT a note count. The exporter's docs only promise "progress and
 // errors go to stderr" — the format is freeform and unverified, and it emits
 // more than one line per note, so `p.done` can climb past the real note count.
-// We therefore never present it as a raw tally, and never parse the line into a
-// "current note" (that produced garbage like "1683]"). For a full export we
-// show a clamped % against the real DB total; for incremental we show an honest
-// indeterminate "working" state with no fabricated number.
+// For a full export we show a clamped % against the real DB total; for
+// incremental we show an honest indeterminate sweep. Never parse stderr into a
+// note name (that produced garbage like "1683]").
 
 const syncBar     = document.getElementById("syncBar");
 const syncBarFill = document.getElementById("syncBarFill");
@@ -2094,122 +2297,112 @@ function resetSyncBar() {
   syncBarFill.style.width = "0%";
 }
 
-async function pollSyncProgress(btn, sta) {
-  return new Promise(resolve => {
-    function poll() {
-      fetch("/api/sync").then(r => r.json()).then(d => {
-        const p = d.sync_progress;
-        if (p && p.error) {
-          sta.textContent = "Export failed";
-          resetSyncBar();
-          alert("Sync failed: " + p.error);
-          resolve({ error: true });
-          return;
-        }
-        if (p && p.active) {
-          const cur = p.current || "";
-          // These two are status strings WE set server-side (not exporter
-          // stderr), so they are safe and meaningful to display verbatim.
-          if (cur.startsWith("Cleaning up") || cur.startsWith("Removed ")
-              || cur.startsWith("Attachment cleanup skipped")) {
-            setSyncBar(null);
-            btn.textContent = "↻ …";
-            sta.textContent = cur;
-          } else if (p.total > 0) {
-            // Full export — real DB note count known. `p.done` (stderr lines)
-            // is clamped to the total so the display can never exceed reality.
-            const shown = Math.min(p.done, p.total);
-            const pct   = Math.round(shown / p.total * 100);
-            setSyncBar(pct);
-            btn.textContent = `↻ ${pct}%`;
-            sta.textContent = `Exporting notes — ${pct}% (${shown} / ${p.total})…`;
-          } else {
-            // Incremental — the changed-note count is unknowable up front and
-            // `p.done` is an unreliable stderr-line count, so show an honest
-            // indeterminate "working" state with no number.
-            setSyncBar(null);
-            btn.textContent = "↻ …";
-            sta.textContent = "Syncing — exporting changed notes…";
-          }
-          setTimeout(poll, 300);
-        } else {
-          resolve({});
-        }
-      }).catch(() => setTimeout(poll, 500));
-    }
-    poll();
-  });
-}
-
-async function pollIndexProgress(btn, sta) {
-  return new Promise(resolve => {
-    function poll() {
-      fetch("/api/index-status").then(r => r.json()).then(d => {
-        if (d.active) {
-          if (d.total === 0) {
-            setSyncBar(null);
-            sta.textContent = "Re-indexing — scanning notes folder…";
-            btn.textContent = "↻ …";
-          } else {
-            const pct = Math.round(d.done / d.total * 100);
-            setSyncBar(pct);
-            sta.textContent = `Re-indexing ${d.done} / ${d.total}…`;
-            btn.textContent = "↻ " + pct + "%";
-          }
-          setTimeout(poll, 300);
-        } else {
-          resetSyncBar();
-          sta.textContent = "Synced just now";
-          btn.disabled = false;
-          btn.textContent = "↻ Sync";
-          // Refresh note list then show the sync report modal
-          loadFolders().then(loadTags).then(() => {
-            updateSearchAllPill(); loadNoteList();
-          }).then(() => {
-            if (window._showSyncLog) window._showSyncLog();
-          }).then(resolve);
-        }
-      }).catch(() => setTimeout(poll, 500));
-    }
-    poll();
-  });
-}
-
 document.getElementById("syncBtn").addEventListener("click", async () => {
   const btn    = document.getElementById("syncBtn");
   const sta    = document.getElementById("syncStatus");
   const footer = btn.closest(".sync-footer");
-  const done   = () => {
-    footer.classList.remove("syncing"); resetSyncBar();
-    btn.disabled = false; btn.textContent = "↻ Sync";
-  };
+  const logBtn = document.getElementById("syncLogBtn");
+  const ui     = window._syncLog;
+  const doneBtn = document.getElementById("syncLogDoneBtn");
+
+  // Open modal in live mode immediately — before POST even returns
+  ui.openLive("Starting sync…");
+
+  // Minimal footer indicator while modal is the primary UI
   btn.disabled = true;
   btn.textContent = "↻ …";
-  sta.textContent = "Starting export…";
+  sta.textContent = "Syncing…";
   footer.classList.add("syncing");
-  setSyncBar(null);   // indeterminate until the first progress update arrives
+  setSyncBar(null);
+
+  const resetFooter = () => {
+    footer.classList.remove("syncing");
+    resetSyncBar();
+    btn.disabled    = false;
+    btn.textContent = "↻ Sync";
+  };
+
   try {
     const r = await fetch("/api/sync", { method: "POST" });
     const d = await r.json();
+
     if (d.status === "error") {
+      resetFooter();
       sta.textContent = "Sync failed";
-      resetSyncBar();
-      alert("Sync failed: " + (d.message || "unknown error"));
-      done(); return;
+      ui.showError(d.message || "Unknown error");
+      doneBtn.onclick = () => {
+        document.getElementById("syncLogOverlay").classList.remove("open");
+      };
+      return;
     }
-    // Phase 1: export running async — poll for per-note progress
-    const exportResult = await pollSyncProgress(btn, sta);
-    if (exportResult.error) { done(); return; }
-    // Phase 2: indexing runs async after export — poll for index progress
-    btn.textContent = "↻ …";
-    sta.textContent = "Export complete — re-indexing…";
-    setSyncBar(null);
-    await pollIndexProgress(btn, sta);
-    done();
+
+    // ── Phase 1: poll export progress, update modal live ─────────────
+    await new Promise(resolve => {
+      function poll() {
+        fetch("/api/sync").then(r => r.json()).then(d => {
+          const p  = d.sync_progress;
+          const ll = d.live_lines || [];
+          if (p && p.error) {
+            resetFooter();
+            sta.textContent = "Sync failed";
+            ui.showError(p.error);
+            doneBtn.onclick = () => {
+              document.getElementById("syncLogOverlay").classList.remove("open");
+            };
+            resolve(); return;
+          }
+          if (p && p.active) {
+            ui.updateLive(p, ll);
+            setTimeout(poll, 300);
+          } else {
+            resolve();
+          }
+        }).catch(() => setTimeout(poll, 500));
+      }
+      poll();
+    });
+
+    // ── Phase 2: poll re-index progress ──────────────────────────────
+    await new Promise(resolve => {
+      function poll() {
+        fetch("/api/index-status").then(r => r.json()).then(d => {
+          if (d.active) {
+            ui.updateReindex(d);
+            setTimeout(poll, 300);
+          } else {
+            resolve();
+          }
+        }).catch(() => setTimeout(poll, 500));
+      }
+      poll();
+    });
+
+    // ── All done — fetch the structured log and show report ───────────
+    resetFooter();
+    sta.textContent = "Synced just now";
+    logBtn.hidden   = false;
+
+    const log = await fetch("/api/sync-log").then(r => r.json());
+    ui.showReport(log && log.available !== false ? log : {
+      timestamp: new Date().toISOString(), type: "incremental", scheme: "no_prefix",
+      export: {}, cleanup: {}, reindex: {}, total_duration_s: 0,
+    });
+
+    // Done button: user confirms, THEN the note list refreshes
+    doneBtn.onclick = () => {
+      document.getElementById("syncLogOverlay").classList.remove("open");
+      loadFolders().then(loadTags).then(() => {
+        updateSearchAllPill(); loadNoteList();
+      });
+    };
+
   } catch (e) {
+    resetFooter();
     sta.textContent = "Sync error";
-    alert("Sync error: " + e.message);
-    done();
+    ui.showError(e.message || "Unexpected error");
+    doneBtn.onclick = () => {
+      document.getElementById("syncLogOverlay").classList.remove("open");
+    };
   }
 });
 

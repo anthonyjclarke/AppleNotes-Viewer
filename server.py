@@ -522,7 +522,13 @@ def _run_export_async(notes_root: Path, bin_path: str) -> None:
                 stderr_lines.append(line)
                 with _lock:
                     _state["sync_progress"]["done"]    = done
-                    _state["sync_progress"]["current"] = line[:80]
+                    _state["sync_progress"]["current"] = line[:120]
+                    sp_lines = _state["sync_progress"].get("lines")
+                    if sp_lines is not None:
+                        sp_lines.append(line)
+                        # Keep most recent 1000 lines; trim if needed
+                        if len(sp_lines) > 1000:
+                            del sp_lines[:-800]
             proc.wait(timeout=300)
             log["export"]["duration_s"]   = round(time.monotonic() - t_export)
             log["export"]["stderr_total"] = done
@@ -1046,11 +1052,13 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/sync":
             last = state["last_sync"]
             with _lock:
-                sync_prog = dict(_state["sync_progress"])
+                sync_prog  = dict(_state["sync_progress"])
+                live_lines = list(_state["sync_progress"].get("lines", [])[-50:])
             self._json({
                 "last_synced":   last.isoformat() if last else None,
                 "count":         len(state["notes"]),
                 "sync_progress": sync_prog,
+                "live_lines":    live_lines,
             })
 
         elif path == "/api/sync-log":
@@ -1183,8 +1191,11 @@ class Handler(BaseHTTPRequestHandler):
                 return
 
             with _lock:
-                _state["sync_progress"] = {"active": True, "done": 0, "total": 0,
-                                            "current": "Starting…", "error": None}
+                _state["sync_progress"] = {
+                    "active": True, "done": 0, "total": 0,
+                    "current": "Starting…", "error": None,
+                    "lines": [],   # accumulated stderr lines for the live modal view
+                }
             _run_export_async(notes_root, bin_path)
             self._json({"status": "syncing"})
 
