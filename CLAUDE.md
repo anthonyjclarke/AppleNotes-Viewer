@@ -4,7 +4,7 @@
 
 Local single-page web app for browsing and searching Apple Notes exports produced by
 [`apple-notes-exporter`](https://github.com/kzaremski/apple-notes-exporter) CLI.
-v2.4.5 — Python 3 stdlib only, no framework, no build step.
+v2.4.6 — Python 3 stdlib only, no framework, no build step.
 
 ---
 
@@ -105,8 +105,9 @@ parse `current`/stderr into a note name (that produced garbage like `1683]`).
 
 **Sync log** — `_state["sync_log"]` is a structured dict built by `_run_export_async`
 across all phases: `{timestamp, type, scheme, export:{duration_s, stderr_lines[-500:],
-stderr_total, exit_code, error}, cleanup:{files_removed, bytes_freed, items:[{note,file,
-size}], skipped, skip_reason}, reindex:{notes_indexed, duration_s}, total_duration_s}`.
+stderr_total, exit_code, error}, cleanup:{files_removed, bytes_freed, dirs_removed,
+items:[{note,file,size}], skipped, skip_reason}, reindex:{notes_indexed, duration_s},
+total_duration_s}`.
 `_wait_for_reindex` thread writes the final log once `index_progress.active` goes False.
 Served by `GET /api/sync-log`; powers the Sync Report modal. `GET /api/sync` also
 returns `live_lines` — last 50 of `sync_progress["lines"]` — for the live output pane.

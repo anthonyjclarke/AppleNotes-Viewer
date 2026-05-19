@@ -27,6 +27,30 @@
 
 ---
 
+## [2.4.6] 19-05-2026
+
+### Fixed
+
+- **Empty `(Attachments)` folders no longer clutter Finder** — `notes-export` creates
+  `(Attachments)` subdirectories for notes and touches them on every incremental run,
+  even if a note has no attachments. This caused all attachment folders to show "Today"
+  as their modified date in Finder after every sync, making it appear as if the export
+  had changed when nothing had.
+
+  `_prune_orphan_attachments` now removes any `(Attachments)` folder that is empty
+  after the orphan-file pass (either it was already empty, or all its files were
+  orphans and just deleted). The exporter will recreate the folder if the note is
+  re-synced with attachments in future.
+
+  The Sync Report modal **Attachment cleanup** card now shows empty folders removed
+  separately from orphaned files (e.g. "2 orphaned files removed — 1.4 MB freed ·
+  47 empty folders removed"), and the no-op message was updated to "No orphaned
+  attachment files or empty folders".
+
+  `dirs_removed` added to the cleanup result dict and to the log's `cleanup` section.
+
+---
+
 ## [2.4.5] 19-05-2026
 
 ### Fixed

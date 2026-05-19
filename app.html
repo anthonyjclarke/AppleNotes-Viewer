@@ -2157,9 +2157,12 @@ document.getElementById("settingsBtn").addEventListener("click", () => {
     if (cl.skipped) {
       addPhase("warn", "⚠", "Attachment cleanup", "—",
         `<span class="synclog-warn">${cl.skip_reason || "Skipped"}</span>`);
-    } else if ((cl.files_removed || 0) > 0) {
-      const n = cl.files_removed, b = cl.bytes_freed || 0;
-      let detail = `<div class="synclog-cleanup-summary">${n} orphaned file${n !== 1 ? "s" : ""} removed — ${fmtBytes(b)} freed</div>`;
+    } else if ((cl.files_removed || 0) > 0 || (cl.dirs_removed || 0) > 0) {
+      const n = cl.files_removed || 0, b = cl.bytes_freed || 0, d = cl.dirs_removed || 0;
+      let summary = [];
+      if (n > 0) summary.push(`${n} orphaned file${n !== 1 ? "s" : ""} removed — ${fmtBytes(b)} freed`);
+      if (d > 0) summary.push(`${d} empty folder${d !== 1 ? "s" : ""} removed`);
+      let detail = `<div class="synclog-cleanup-summary">${summary.join(" · ")}</div>`;
       if ((cl.items || []).length > 0) {
         detail += `<div class="synclog-file-table">
           <div class="synclog-file-hd"><span>Note</span><span>File</span><span>Size</span></div>`;
@@ -2174,7 +2177,7 @@ document.getElementById("settingsBtn").addEventListener("click", () => {
       }
       addPhase("ok", "✓", "Attachment cleanup", "—", detail);
     } else {
-      addPhase("ok", "✓", "Attachment cleanup", "—", "No orphaned attachment files");
+      addPhase("ok", "✓", "Attachment cleanup", "—", "No orphaned attachment files or empty folders");
     }
 
     // Re-index phase

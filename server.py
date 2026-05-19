@@ -361,12 +361,14 @@ def _prune_orphan_attachments(notes_root: Path) -> dict:
         nested directories are never touched
 
     Returns a dict:
-      {files_removed, bytes_freed, items: [{note, file, size}], skipped, skip_reason}
+      {files_removed, bytes_freed, dirs_removed,
+       items: [{note, file, size}], skipped, skip_reason}
     Never raises.
     """
     result: dict = {
         "files_removed": 0,
         "bytes_freed":   0,
+        "dirs_removed":  0,
         "items":         [],   # [{note: str, file: str, size: int}, ...]
         "skipped":       False,
         "skip_reason":   None,
@@ -435,6 +437,20 @@ def _prune_orphan_attachments(notes_root: Path) -> dict:
                     })
                 except Exception:
                     pass
+
+            # Remove the folder if it is now empty. The exporter creates
+            # "(Attachments)" directories even for notes that have no
+            # attachments, and it touches them on every incremental run —
+            # which makes them show "Today" in Finder even when unchanged.
+            # Removing empty ones keeps the folder tree clean; the exporter
+            # will recreate them if the note is re-synced with attachments.
+            try:
+                if not any(att_dir.iterdir()):
+                    att_dir.rmdir()
+                    result["dirs_removed"] += 1
+            except Exception:
+                pass
+
         except Exception:
             continue
     return result
@@ -502,7 +518,7 @@ def _run_export_async(notes_root: Path, bin_path: str) -> None:
                 "error":        None,
             },
             "cleanup": {
-                "files_removed": 0, "bytes_freed": 0,
+                "files_removed": 0, "bytes_freed": 0, "dirs_removed": 0,
                 "items": [], "skipped": False, "skip_reason": None,
             },
             "reindex": {"notes_indexed": 0, "duration_s": 0},
