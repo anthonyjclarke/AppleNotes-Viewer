@@ -270,9 +270,185 @@ def _start_rebuild_async(notes_root: Path | None = None) -> None:
     threading.Thread(target=_rebuild, args=(notes_root,), daemon=True).start()
 
 
+def _count_notes_for_progress(bin_path: str) -> int:
+    """Best-effort total note count for a full-export progress bar.
+
+    Only meaningful for a full export (no watermark): list-notes returns every
+    note in the Notes DB, whereas an incremental run re-exports only the changed
+    subset — so we never call this when a watermark is present. Any failure
+    (no Full Disk Access, unexpected JSON, timeout) returns 0, and the client
+    falls back to the indeterminate "actively working" indicator.
+    """
+    try:
+        out = subprocess.run(
+            [bin_path, "list-notes", "--format", "json"],
+            capture_output=True, text=True, timeout=90,
+        ).stdout
+        data = json.loads(out)
+        if isinstance(data, list):
+            return len(data)
+        if isinstance(data, dict):
+            for key in ("notes", "items", "results"):
+                if isinstance(data.get(key), list):
+                    return len(data[key])
+    except Exception:
+        pass
+    return 0
+
+
+def _prune_orphan_attachments(notes_root: Path) -> tuple[int, int]:
+    """Delete attachment files left behind when a note's image is replaced.
+
+    notes-export is additive at the file level: editing a note to swap an image
+    re-exports the note HTML and writes the NEW attachment, but never removes the
+    OLD file from the note's "(Attachments)/" folder. The same applies when a note
+    loses all its attachments, or is deleted in Apple Notes.
+
+    The export watermark (AppleNotesExportSyncWatermark.json) records, per note,
+    the exact attachment paths from the most recent export — i.e. the *current*
+    set. Any file in a note's attachments folder not in that note's
+    `attachmentPaths` is a stale orphan and is removed.
+
+    Fail-safe by design:
+      - missing / unreadable watermark            -> do nothing
+      - a "* (Attachments)" folder with no
+        matching watermark entry                  -> left untouched (covers stray
+                                                     dirs and the date-prefix vs
+                                                     no-prefix duplicate case)
+      - watermark lists attachments but none
+        resolve into the folder we're about to
+        prune                                     -> skip that folder (our path
+                                                     assumption may not hold)
+      - only regular files directly inside a
+        "* (Attachments)" folder are ever
+        deleted; note HTML, sibling folders and
+        nested directories are never touched
+
+    Returns (files_removed, bytes_freed). Never raises.
+    """
+    wm = notes_root / "AppleNotesExportSyncWatermark.json"
+    try:
+        entries = json.loads(wm.read_text(encoding="utf-8")).get("notes", {})
+    except Exception:
+        return (0, 0)
+
+    # Consistency gate: if the export folder is grossly out of sync with its own
+    # manifest (interrupted export, external deletion, a cloud-sync tool like
+    # Syncthing/Dropbox/iCloud propagating deletes into the folder), do NOT run
+    # any cleanup — pruning against a half-present tree is pointless and could
+    # compound damage. Require that most watermarked notes still exist on disk.
+    present = 0
+    for entry in entries.values():
+        ep = entry.get("exportedPath", "") or ""
+        if ep.endswith(".html") and (notes_root / ep).is_file():
+            present += 1
+    if entries and present < 0.75 * len(entries):
+        with _lock:
+            _state["sync_progress"]["current"] = (
+                f"Attachment cleanup skipped — export folder inconsistent "
+                f"({present} of {len(entries)} notes on disk). Folder may be in a "
+                f"cloud-sync share; see README.")
+        return (-1, 0)   # sentinel: skipped, not "0 removed"
+
+    removed = freed = 0
+    for entry in entries.values():
+        try:
+            exported = entry.get("exportedPath", "") or ""
+            if not exported.endswith(".html"):
+                continue
+            att_dir = notes_root / (exported[:-5] + " (Attachments)")
+            if not att_dir.is_dir():
+                continue
+
+            aps = entry.get("attachmentPaths", []) or []
+            expected, matched = set(), False
+            for ap in aps:
+                p = notes_root / ap
+                if p.parent == att_dir:
+                    expected.add(p.name)
+                    matched = True
+            # attachmentPaths present but none map into this folder → our
+            # path assumption is off; do not risk deleting live files.
+            if aps and not matched:
+                continue
+
+            for child in att_dir.iterdir():
+                if not child.is_file() or child.name in expected:
+                    continue
+                try:
+                    sz = child.stat().st_size
+                    child.unlink()
+                    removed += 1
+                    freed += sz
+                except Exception:
+                    pass
+        except Exception:
+            continue
+    return (removed, freed)
+
+
+_DATE_PREFIX_RE = re.compile(r"(?:^|/)\d{4}-\d{2}-\d{2} ")
+
+
+def _detect_export_prefix_args(notes_root: Path) -> list[str]:
+    """Return exporter args so Sync MATCHES the folder's existing filename scheme.
+
+    notes-export defaults to no date prefix; `--add-date-prefix` writes
+    `YYYY-MM-DD Title.html`. The incremental manifest keys on the exported path,
+    so running Sync under a *different* scheme than the existing files makes the
+    exporter treat every note as new and silently duplicates the whole library.
+
+    We detect the existing scheme — preferring the watermark's recorded
+    `exportedPath`s, falling back to a scan of on-disk note files — and return
+    `["--add-date-prefix", "--date-format", "iso"]` when ≥ 80% are date-prefixed,
+    else `[]` (the no-prefix default). An empty/unknown folder → no prefix.
+    """
+    paths: list[str] = []
+    wm = notes_root / "AppleNotesExportSyncWatermark.json"
+    try:
+        entries = json.loads(wm.read_text(encoding="utf-8")).get("notes", {})
+        paths = [e.get("exportedPath", "") for e in entries.values()
+                 if (e.get("exportedPath", "") or "").endswith(".html")]
+    except Exception:
+        paths = []
+    if not paths:
+        try:
+            for i, f in enumerate(notes_root.rglob("*.html")):
+                if len(f.relative_to(notes_root).parts) == 3:
+                    paths.append(f.name)
+                if i > 600:
+                    break
+        except Exception:
+            paths = []
+    if not paths:
+        return []
+    prefixed = sum(1 for p in paths if _DATE_PREFIX_RE.search("/" + p))
+    return ["--add-date-prefix", "--date-format", "iso"] \
+        if prefixed >= 0.80 * len(paths) else []
+
+
 def _run_export_async(notes_root: Path, bin_path: str) -> None:
     """Run notes-export in a background thread, streaming per-note progress into _state."""
     def run():
+
+        # A full export (no watermark yet) has a knowable total — fetch it so the
+        # UI can show a real % bar for the slow first sync. Incremental runs skip
+        # this: the changed-note count is unknowable up front, so the client shows
+        # an indeterminate sweep + live count + current note instead.
+        watermark = notes_root / "AppleNotesExportSyncWatermark.json"
+        if not watermark.exists():
+            total = _count_notes_for_progress(bin_path)
+            if total > 0:
+                with _lock:
+                    _state["sync_progress"]["total"] = total
+
+        # Match the existing folder's filename scheme so an incremental sync
+        # updates files in place instead of writing a duplicate parallel set.
+        prefix_args = _detect_export_prefix_args(notes_root)
+        if prefix_args:
+            with _lock:
+                _state["sync_progress"]["current"] = (
+                    "Existing notes use a date prefix — matching scheme…")
 
         try:
             proc = subprocess.Popen(
@@ -280,6 +456,7 @@ def _run_export_async(notes_root: Path, bin_path: str) -> None:
                  "--format", "html",
                  "--incremental",
                  "--verbose",
+                 *prefix_args,
                  "--output", str(notes_root)],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,
@@ -311,6 +488,23 @@ def _run_export_async(notes_root: Path, bin_path: str) -> None:
             with _lock:
                 _state["sync_progress"].update({"active": False, "error": str(e)})
             return
+
+        # notes-export never removes attachments superseded by an edit (it is
+        # additive). Sweep each note's "(Attachments)/" folder against the
+        # freshly-written watermark and delete files the note no longer uses.
+        try:
+            with _lock:
+                _state["sync_progress"]["current"] = "Cleaning up replaced attachments…"
+            n_rm, n_by = _prune_orphan_attachments(notes_root)
+            # n_rm == -1 is the "skipped, folder inconsistent" sentinel; the
+            # explanatory status was already set inside the function.
+            if n_rm > 0:
+                msg = (f"Removed {n_rm} orphaned attachment"
+                       f"{'' if n_rm == 1 else 's'} ({n_by // 1024} KB freed)")
+                with _lock:
+                    _state["sync_progress"]["current"] = msg
+        except Exception:
+            pass
 
         now = datetime.now()
         with _lock:

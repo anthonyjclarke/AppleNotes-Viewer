@@ -80,11 +80,11 @@ enhancement could group them in an "Undated" section.
 | Unknown                     | Status                                                                 |
 |:----------------------------|:-----------------------------------------------------------------------|
 | mtime preservation          | ✅ RESOLVED — matches note's last-edit date                            |
-| Attachment path format      | ✅ RESOLVED — `{yyyy-MM-dd} {Title} (Attachments)/{filename}`          |
+| Attachment path format      | ✅ RESOLVED — `{Title} (Attachments)/{filename}` (opt. `YYYY-MM-DD ` prefix) |
 | Account directory names     | ✅ RESOLVED — `iCloud`, `On My Mac`                                    |
 | Apple Notes folder hierarchy | ✅ RESOLVED — preserved; each folder is a subdirectory under account  |
 | Incremental delete handling | ⚠️ UNKNOWN — does `--incremental` remove HTML for deleted notes?      |
-| manifest.json generation    | ⚠️ UNKNOWN — not present in initial export; may appear on second run  |
+| Sync manifest               | ✅ RESOLVED — `AppleNotesExportSyncWatermark.json` at export root, keyed by `exportedPath` + `modificationDate` |
 
 ---
 
@@ -223,9 +223,24 @@ NOTES_ROOT=$(python3 -c "import json,sys; print(json.load(open('$CONFIG'))['note
 ```
 
 > **Note on `--incremental`:** This flag is added explicitly for performance — it is not a
-> default apple-notes-exporter option. On the first run it performs a full export. On
-> subsequent runs it only processes changed notes. Whether a `manifest.json` tracking file
-> is written is not yet confirmed; the flag is safe to pass regardless.
+> default apple-notes-exporter option. On the first run (no manifest present) it performs a
+> full export *and* writes the manifest. On subsequent runs it only processes changed notes.
+> **Confirmed:** the manifest is `AppleNotesExportSyncWatermark.json`, written to the export
+> root, keyed by each note's `exportedPath` and `modificationDate`. Use it from the first
+> run so the manifest exists for later fast syncs. `--reset-sync` force-deletes the manifest
+> and is only effective together with `--incremental`.
+
+> **Filename-scheme consistency (critical).** The exporter's default names files
+> `{Title}.html` — **no date prefix**. `--add-date-prefix` (+ `--date-format iso|us|eu`)
+> prefixes the note's *creation* date, giving `YYYY-MM-DD {Title}.html`. Because the
+> incremental manifest keys on `exportedPath`, running the export under a *different*
+> scheme than the existing files makes every note look new: the exporter writes a parallel
+> set under the new names, leaves the old files untouched, and the note count silently
+> ~doubles. The Sync command (`_run_export_async`, `sync.sh`) uses the no-prefix default,
+> so any initial/manual export must also be no-prefix. Recovery from a mixed folder:
+> delete the export root contents *including the manifest*, then re-run the no-prefix
+> export. The viewer strips a leading `YYYY-MM-DD ` prefix anyway (it is cosmetic and
+> never a date source), so no-prefix loses nothing.
 
 ### Step 5 — `app.html`: attachment rewriter + sync UI + settings link
 

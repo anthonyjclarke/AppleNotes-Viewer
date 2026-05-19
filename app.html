@@ -668,8 +668,14 @@
     .sync-footer.syncing {
       background: rgba(255, 204, 0, 0.09);
     }
-    .sync-status {
+    .sync-info {
       flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .sync-status {
       font-size: 11px;
       color: var(--tx-secondary);
       white-space: nowrap;
@@ -680,11 +686,28 @@
     .sync-footer.syncing .sync-status {
       color: var(--tx-primary);
       font-weight: 500;
-      animation: sync-pulse 1.5s ease-in-out infinite;
     }
-    @keyframes sync-pulse {
-      0%, 100% { opacity: 1; }
-      50%       { opacity: 0.5; }
+    /* Slim progress bar — hidden until a sync is running */
+    .sync-bar {
+      display: none;
+      height: 3px;
+      border-radius: 2px;
+      background: var(--bg-search);
+      overflow: hidden;
+    }
+    .sync-footer.syncing .sync-bar { display: block; }
+    .sync-bar-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: 2px;
+      background: var(--accent);
+      transition: width 0.3s ease;
+    }
+    /* Indeterminate sweep — used when the total is unknown (incremental sync) */
+    .sync-bar-fill.indet {
+      width: 30% !important;
+      transition: none;
+      animation: scan-sweep 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
     }
     .sync-btn {
       flex-shrink: 0;
@@ -939,7 +962,10 @@
     </div>
 
     <div class="sync-footer">
-      <span class="sync-status" id="syncStatus">—</span>
+      <div class="sync-info">
+        <span class="sync-status" id="syncStatus">—</span>
+        <div class="sync-bar" id="syncBar"><div class="sync-bar-fill" id="syncBarFill"></div></div>
+      </div>
       <button class="sync-btn" id="syncBtn" title="Sync notes now">↻ Sync</button>
     </div>
   </aside>
@@ -1725,6 +1751,31 @@ async function loadSyncStatus() {
   } catch { /* silent — sync not configured */ }
 }
 
+// NOTE: `p.done` is the count of non-empty stderr lines from `notes-export
+// --verbose`, NOT a note count. The exporter's docs only promise "progress and
+// errors go to stderr" — the format is freeform and unverified, and it emits
+// more than one line per note, so `p.done` can climb past the real note count.
+// We therefore never present it as a raw tally, and never parse the line into a
+// "current note" (that produced garbage like "1683]"). For a full export we
+// show a clamped % against the real DB total; for incremental we show an honest
+// indeterminate "working" state with no fabricated number.
+
+const syncBar     = document.getElementById("syncBar");
+const syncBarFill = document.getElementById("syncBarFill");
+
+function setSyncBar(pct /* number 0-100, or null for indeterminate */) {
+  if (pct === null) {
+    syncBarFill.classList.add("indet");
+  } else {
+    syncBarFill.classList.remove("indet");
+    syncBarFill.style.width = Math.max(0, Math.min(100, pct)) + "%";
+  }
+}
+function resetSyncBar() {
+  syncBarFill.classList.remove("indet");
+  syncBarFill.style.width = "0%";
+}
+
 async function pollSyncProgress(btn, sta) {
   return new Promise(resolve => {
     function poll() {
@@ -1732,18 +1783,35 @@ async function pollSyncProgress(btn, sta) {
         const p = d.sync_progress;
         if (p && p.error) {
           sta.textContent = "Export failed";
+          resetSyncBar();
           alert("Sync failed: " + p.error);
           resolve({ error: true });
           return;
         }
         if (p && p.active) {
-          if (p.total > 0) {
-            const pct = Math.round(p.done / p.total * 100);
+          const cur = p.current || "";
+          // These two are status strings WE set server-side (not exporter
+          // stderr), so they are safe and meaningful to display verbatim.
+          if (cur.startsWith("Cleaning up") || cur.startsWith("Removed ")
+              || cur.startsWith("Attachment cleanup skipped")) {
+            setSyncBar(null);
+            btn.textContent = "↻ …";
+            sta.textContent = cur;
+          } else if (p.total > 0) {
+            // Full export — real DB note count known. `p.done` (stderr lines)
+            // is clamped to the total so the display can never exceed reality.
+            const shown = Math.min(p.done, p.total);
+            const pct   = Math.round(shown / p.total * 100);
+            setSyncBar(pct);
             btn.textContent = `↻ ${pct}%`;
-            sta.textContent = `Exporting ${p.done} / ${p.total}…`;
-          } else if (p.done > 0) {
-            btn.textContent = `↻ ${p.done}`;
-            sta.textContent = `Exported ${p.done}…`;
+            sta.textContent = `Exporting notes — ${pct}% (${shown} / ${p.total})…`;
+          } else {
+            // Incremental — the changed-note count is unknowable up front and
+            // `p.done` is an unreliable stderr-line count, so show an honest
+            // indeterminate "working" state with no number.
+            setSyncBar(null);
+            btn.textContent = "↻ …";
+            sta.textContent = "Syncing — exporting changed notes…";
           }
           setTimeout(poll, 300);
         } else {
@@ -1761,13 +1829,18 @@ async function pollIndexProgress(btn, sta) {
       fetch("/api/index-status").then(r => r.json()).then(d => {
         if (d.active) {
           if (d.total === 0) {
-            sta.textContent = "Scanning…";
+            setSyncBar(null);
+            sta.textContent = "Re-indexing — scanning notes folder…";
+            btn.textContent = "↻ …";
           } else {
-            sta.textContent = `Indexing ${d.done} / ${d.total}…`;
-            btn.textContent = "↻ " + Math.round(d.done / d.total * 100) + "%";
+            const pct = Math.round(d.done / d.total * 100);
+            setSyncBar(pct);
+            sta.textContent = `Re-indexing ${d.done} / ${d.total}…`;
+            btn.textContent = "↻ " + pct + "%";
           }
           setTimeout(poll, 300);
         } else {
+          resetSyncBar();
           sta.textContent = "Synced just now";
           btn.disabled = false;
           btn.textContent = "↻ Sync";
@@ -1785,16 +1858,21 @@ document.getElementById("syncBtn").addEventListener("click", async () => {
   const btn    = document.getElementById("syncBtn");
   const sta    = document.getElementById("syncStatus");
   const footer = btn.closest(".sync-footer");
-  const done   = () => { footer.classList.remove("syncing"); btn.disabled = false; btn.textContent = "↻ Sync"; };
+  const done   = () => {
+    footer.classList.remove("syncing"); resetSyncBar();
+    btn.disabled = false; btn.textContent = "↻ Sync";
+  };
   btn.disabled = true;
   btn.textContent = "↻ …";
-  sta.textContent = "Starting…";
+  sta.textContent = "Starting export…";
   footer.classList.add("syncing");
+  setSyncBar(null);   // indeterminate until the first progress update arrives
   try {
     const r = await fetch("/api/sync", { method: "POST" });
     const d = await r.json();
     if (d.status === "error") {
       sta.textContent = "Sync failed";
+      resetSyncBar();
       alert("Sync failed: " + (d.message || "unknown error"));
       done(); return;
     }
@@ -1802,8 +1880,9 @@ document.getElementById("syncBtn").addEventListener("click", async () => {
     const exportResult = await pollSyncProgress(btn, sta);
     if (exportResult.error) { done(); return; }
     // Phase 2: indexing runs async after export — poll for index progress
-    btn.textContent = "↻ 0%";
-    sta.textContent = "Indexing…";
+    btn.textContent = "↻ …";
+    sta.textContent = "Export complete — re-indexing…";
+    setSyncBar(null);
     await pollIndexProgress(btn, sta);
     done();
   } catch (e) {

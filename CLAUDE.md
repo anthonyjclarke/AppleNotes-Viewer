@@ -41,16 +41,23 @@ falls back to `configured_root` so a stale path from another Mac shows in the fi
 "/api/browse"}`. The browse API must be in this set; if excluded, the Settings page
 folder picker silently fails whenever `notes_root` is `None`.
 
-**Export depth filter** — exporter produces `{Account}/{Folder}/{date} {Title}.html` (depth 3).
-`len(f.relative_to(notes_root).parts) == 3` is the only filter; attachment subdirs (depth 4)
-are skipped. `_SKIP_FOLDERS = {"Recently Deleted"}` excludes that system folder.
+**Export depth filter** — exporter produces `{Account}/{Folder}/{Title}.html` (depth 3;
+optional `YYYY-MM-DD ` prefix). `len(f.relative_to(notes_root).parts) == 3` is the only
+filter; attachment subdirs (depth 4) skipped. `_SKIP_FOLDERS = {"Recently Deleted"}`.
 
 **Per-segment URL encoding** — folder names can contain `#` (Apple Notes hashtag
 folders). Path segments are encoded individually with `encodeURIComponent` so `#`
 becomes `%23`, not a URL fragment. The static handler uses `unquote()` to decode.
 
 **Date source** — `<meta name="modified" content="D Mon YYYY at H:MM am/pm">` parsed
-first; mtime is the fallback (survives rsync/OS migration that corrupts mtime).
+first; mtime is the fallback (survives rsync/OS migration that corrupts mtime). The
+`YYYY-MM-DD ` filename prefix is stripped (lines 174, 193) and is **never** a date
+source — purely cosmetic. The exporter's default is *no* prefix; `--add-date-prefix`
+adds the creation date. A scheme mismatch vs. existing files makes the incremental
+manifest treat every note as new → silent whole-library duplication. `_run_export_async`
+calls `_detect_export_prefix_args()` to auto-match the existing scheme (watermark
+`exportedPath`s, else on-disk scan; ≥80% date-prefixed → `--add-date-prefix
+--date-format iso`). `sync.sh` does NOT auto-detect — only the in-app Sync does.
 
 **Tag extraction — dual source, two thresholds** — apple-notes-exporter embeds Apple
 Notes' native tags in the filename stem (e.g. `2026-04-12 Meeting #work.html`). These
@@ -90,6 +97,19 @@ nodes — never on a detached/serialised document (see PDF `%23` gotcha above).
 error}`. POST `/api/sync` sets `active: True` before spawning `_run_export_async()`;
 GET `/api/sync` includes the full `sync_progress` snapshot. The client polls GET during
 export (via `pollSyncProgress`), then hands off to `pollIndexProgress` for re-indexing.
+`done` is the **stderr-line count** from `--verbose`, NOT a note count (freeform
+stream, >1 line/note — it overshoots the real total). `total` is only set for a
+*full* export (no watermark) via `list-notes`; the client clamps `done` to it for a
+% bar. Incremental leaves `total` 0 → honest indeterminate sweep, no number. Never
+parse `current`/stderr into a note name (that produced garbage like `1683]`).
+
+**Exporter is additive — we prune orphans** — `notes-export` has no clean/mirror
+flag; replacing a note's image leaves the old attachment file behind forever (and
+deleted notes leave stale folders). After every successful export
+`_prune_orphan_attachments()` deletes files not in that note's `attachmentPaths` in
+the freshly-written watermark. Fail-safe: no watermark / no matching entry / paths
+that don't resolve into the folder → that folder is skipped; only regular files
+directly inside a `* (Attachments)` dir are ever deleted.
 
 ---
 
@@ -113,6 +133,14 @@ export (via `pollSyncProgress`), then hands off to `pollIndexProgress` for re-in
   notes whose attachment folder contains a `#tag`.
 - Never process inner `[data-pdf-href]` elements when replacing attachment cards —
   only the outermost; inner elements are guarded by `closest()`.
+- Never hardcode the Sync filename scheme or weaken `_detect_export_prefix_args()`
+  — Sync must match the existing folder's scheme (prefix vs none); a forced
+  mismatch makes the incremental manifest duplicate the whole library.
+- Never assume note loss when files vanish — the export is a derived artefact;
+  Apple Notes is the source of truth. A `notes_root` inside a Syncthing/Dropbox/
+  iCloud share will propagate cross-machine deletions in (looks like data loss,
+  isn't). `_prune_orphan_attachments` aborts if <75% of watermark notes are on
+  disk; never weaken that gate.
 - Never commit `config.json` — it contains absolute local paths.
 - Never increase the `sleep` in `Launch Notes.command` — the server starts async and
   shows a loading screen; sleeping longer does not fix slow startup.

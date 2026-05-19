@@ -21,7 +21,101 @@
 - **Horizontal rules** — `---` on its own line inside exporter blocks should be
   converted to a `<hr>` element, matching Apple Notes' divider style.
 - when searching highlight the search in the preview pane as well
-- why is app stripping out YYYY-mm-dd from filename when opening / sync?
+
+---
+
+## [2.4.2] 18-05-2026
+
+### Added
+
+- **Sync auto-matches the existing filename scheme** — the app's ↻ Sync ran the
+  no-prefix exporter default, so if the initial export was date-prefixed
+  (`YYYY-MM-DD Title.html` — e.g. the GUI app with the date option on), the
+  incremental manifest mismatched and every note silently duplicated. Sync now
+  detects the existing scheme — from the watermark's `exportedPath`s, falling
+  back to a scan of on-disk note files — and appends `--add-date-prefix
+  --date-format iso` when ≥ 80% are date-prefixed, so it writes the *same*
+  filenames the manifest expects and updates in place. Empty/unknown folder →
+  no prefix (unchanged default). This removes the prefix/no-prefix footgun
+  regardless of how the initial export was produced.
+
+- **Cleanup consistency gate (data-safety guard)** — `_prune_orphan_attachments`
+  now refuses to run if fewer than 75% of the watermark's notes are present on
+  disk. This protects against compounding damage when the export folder is in a
+  broken/partial state — interrupted export, manual deletion, or (the real-world
+  trigger) a cloud-sync tool such as **Syncthing/Dropbox/iCloud Drive**
+  propagating deletions into the folder. When tripped it skips all deletion and
+  surfaces an explanatory status. Investigation note: a reported "database
+  destroyed" (≈1,632 of 1,684 notes vanished) was traced to Syncthing
+  replicating cross-machine deletions into a `notes_root` that lived inside a
+  Syncthing share — **not** the exporter or this app. A dry-run of the prune
+  against that folder confirmed it would have deleted 0 files; it structurally
+  only touches files inside `* (Attachments)/` folders, never note HTML. No real
+  notes were lost — the export folder is a derived artefact; Apple Notes remained
+  the intact source of truth. See README "Do not use a cloud-synced folder".
+
+- **Orphaned attachment cleanup on sync** — `notes-export` is additive at the file
+  level: editing a note to shrink/replace an embedded image re-exports the note and
+  writes the *new* attachment but never deletes the *old* one (e.g. an original
+  `Pasted Graphic 2.tiff` lingers beside a new `CleanShot ….png`), so attachment
+  folders bloat over time. There is no exporter prune/clean/mirror flag. After every
+  successful export the app now sweeps each note's `(Attachments)/` folder against
+  the freshly-written `AppleNotesExportSyncWatermark.json` and removes any file the
+  note no longer references. Strictly fail-safe: no/unreadable watermark, a folder
+  with no matching watermark entry, or attachment paths that don't resolve into the
+  folder → that folder is left untouched; only regular files directly inside a
+  `* (Attachments)` folder are ever deleted (note HTML and nested dirs never).
+  Also cleans attachments for notes that lost all images or were deleted. The count
+  of removed files is surfaced in the sync footer status.
+
+### Changed
+
+- **Sync progress is now legible and honest** — the footer previously showed a
+  bare incrementing count ("Exported 779…") with no total and no bar, because
+  the server never populated `sync_progress.total`. Critically, that count is
+  the number of non-empty **stderr lines** from `notes-export --verbose`, *not*
+  a note count — the exporter's stderr is freeform (docs only promise "progress
+  and errors go to stderr") and emits more than one line per note, so the figure
+  climbs **past the real note count** ("Exporting 1992 · 1683]" on a smaller
+  library). The `1683]` token was a parsed fragment of an unverified verbose
+  line. Now:
+  - **Full export** (no watermark) — the server fetches the real note count via
+    `notes-export list-notes` and sets `total`. The footer shows a true
+    **percentage bar**, with the line-count **clamped to the total** so it can
+    never display more than exist: `Exporting notes — 72% (1916 / 2655)…`.
+    Best-effort: any failure (no Full Disk Access, timeout) falls back to the
+    indeterminate indicator below.
+  - **Incremental sync** — the changed-note count is unknowable up front and the
+    stderr count is unreliable, so the footer shows an **animated indeterminate
+    sweep bar** with honest text ("Syncing — exporting changed notes…") and
+    **no fabricated number or parsed note name**.
+  - Removed the `friendlyCurrent()` stderr-line parser entirely — it produced
+    meaningless tokens from an unverified format. The trustworthy
+    orphan-cleanup status (a string the server itself sets) is still surfaced.
+  - The re-index phase reuses the same bar (`Re-indexing N / Total…`) for a
+    continuous two-phase progression, and the bar resets cleanly on completion
+    or error. Replaced the opacity `sync-pulse` text flash with the shared
+    `scan-sweep` bar animation already used by the startup overlay.
+
+### Documentation
+
+- **Export usage clarified** — README now instructs `--incremental` from the *first*
+  export (full export + writes the manifest in one pass; omitting it forces a wasteful
+  second full export later). Fixed the "Force a full re-export" command, which was
+  missing `--incremental` (`--reset-sync` is only effective alongside it).
+- **Filename scheme warning** — documented that the exporter defaults to *no* date
+  prefix while `--add-date-prefix` adds the creation date, and that mixing the two
+  schemes across export/sync silently duplicates every note (the incremental manifest
+  keys on the exported path). README, CLAUDE.md, and the integration doc now state the
+  rule: pick one scheme and use it for every export and sync. Folder-structure example
+  updated to the actual no-prefix default.
+- **Dates & times explained** — new README section documents that sort order comes
+  from `<meta name="modified">` (mtime fallback), the `YYYY-MM-DD ` filename prefix is
+  cosmetic and never used for dates (answering the prior "why is the app stripping the
+  date prefix?" question), and the "1 Jan 2001" cluster reflects Apple Notes' own
+  missing metadata, not a bug.
+- The duplication issue itself needed no code change — the Sync command already
+  used the correct no-prefix default; it was undocumented usage, not a defect.
 
 ---
 
