@@ -302,6 +302,34 @@ _DATE_PREFIX_STRIP = re.compile(r'^\d{4}-\d{2}-\d{2} ')
 _HREF_SRC_RE       = re.compile(r'''(?:href|src)\s*=\s*["']([^"']+)["']''', re.IGNORECASE)
 
 
+def _fmt_size(n: int) -> str:
+    """Human-readable byte size for log lines (e.g. 1.4 MB, 812 KB)."""
+    if n >= 1024 * 1024:
+        return f"{n / (1024 * 1024):.1f} MB"
+    if n >= 1024:
+        return f"{n / 1024:.0f} KB"
+    return f"{n} B"
+
+
+def _emit_sync_line(line: str) -> None:
+    """Append one line to the live sync output buffer (thread-safe, capped).
+
+    Used by both the exporter stderr loop and the cleanup phase so the live
+    output pane and the final scrollable report show one continuous log of
+    the whole sync run — export, attachment cleanup, then re-index.
+    """
+    with _lock:
+        sp = _state.get("sync_progress")
+        if not isinstance(sp, dict):
+            return
+        sp["current"] = line[:120]
+        lines = sp.get("lines")
+        if lines is not None:
+            lines.append(line)
+            if len(lines) > 1000:
+                del lines[:-800]
+
+
 def _referenced_attachments(html_path: Path, att_dir: Path) -> "set[str] | None":
     """Return the set of filenames inside att_dir that the note HTML references.
 
@@ -397,13 +425,16 @@ def _prune_orphan_attachments(notes_root: Path) -> dict:
             f"Folder may be in a cloud-sync share; see README.")
         result["skipped"]     = True
         result["skip_reason"] = reason
-        with _lock:
-            _state["sync_progress"]["current"] = reason
+        _emit_sync_line("── Attachment cleanup ──")
+        _emit_sync_line(f"⚠ {reason}")
         return result
 
     # Scan every "(Attachments)" directory on disk. For each one, parse the
     # corresponding note HTML to find which files it actually references.
     # Anything not referenced in the HTML is an orphan and can be safely removed.
+    _emit_sync_line("── Attachment cleanup ──")
+    _emit_sync_line("Scanning (Attachments) folders for orphaned files…")
+    folders_scanned = 0
     suffix = " (Attachments)"
     for att_dir in notes_root.rglob("* (Attachments)"):
         if not att_dir.is_dir():
@@ -421,6 +452,7 @@ def _prune_orphan_attachments(notes_root: Path) -> dict:
             if referenced is None:
                 continue   # file too large to read; leave folder untouched
 
+            folders_scanned += 1
             note_title = _DATE_PREFIX_STRIP.sub("", stem)
             for child in att_dir.iterdir():
                 if not child.is_file() or child.name in referenced:
@@ -435,8 +467,12 @@ def _prune_orphan_attachments(notes_root: Path) -> dict:
                         "file": child.name,
                         "size": sz,
                     })
-                except Exception:
-                    pass
+                    _emit_sync_line(
+                        f"  ✗ orphan removed: {note_title} / "
+                        f"{child.name} ({_fmt_size(sz)})")
+                except Exception as e:
+                    _emit_sync_line(
+                        f"  ! could not remove {child.name}: {e}")
 
             # Remove the folder if it is now empty. The exporter creates
             # "(Attachments)" directories even for notes that have no
@@ -448,11 +484,31 @@ def _prune_orphan_attachments(notes_root: Path) -> dict:
                 if not any(att_dir.iterdir()):
                     att_dir.rmdir()
                     result["dirs_removed"] += 1
+                    _emit_sync_line(
+                        f"  ✗ empty folder removed: {att_dir.name}")
             except Exception:
                 pass
 
         except Exception:
             continue
+
+    # Cleanup summary — always logged so the user can see it ran.
+    fr, bf, dr = (result["files_removed"],
+                  result["bytes_freed"],
+                  result["dirs_removed"])
+    _emit_sync_line(
+        f"Scanned {folders_scanned} folder"
+        f"{'s' if folders_scanned != 1 else ''}.")
+    if fr or dr:
+        parts = []
+        if fr:
+            parts.append(f"{fr} orphan file{'s' if fr != 1 else ''} "
+                         f"removed ({_fmt_size(bf)} freed)")
+        if dr:
+            parts.append(f"{dr} empty folder{'s' if dr != 1 else ''} removed")
+        _emit_sync_line("✓ Cleanup: " + " · ".join(parts))
+    else:
+        _emit_sync_line("✓ Cleanup: nothing to remove — already clean.")
     return result
 
 
@@ -579,7 +635,19 @@ def _run_export_async(notes_root: Path, bin_path: str) -> None:
             log["export"]["stderr_total"] = done
             log["export"]["stderr_lines"] = stderr_lines[-500:]  # cap for UI
             log["export"]["exit_code"]    = proc.returncode
-            if proc.returncode != 0:
+
+            # notes-export exits non-zero when there is nothing to do
+            # ("All notes are up to date, nothing to export.") — that is a
+            # successful no-op, not a failure. Recognise the benign messages
+            # so an unchanged library does not show "Sync failed".
+            joined = "\n".join(stderr_lines).lower()
+            benign_noop = (
+                "nothing to export"          in joined or
+                "all notes are up to date"   in joined or
+                "no notes to export"         in joined or
+                "no changes"                 in joined
+            )
+            if proc.returncode != 0 and not benign_noop:
                 err = f"Export failed (exit {proc.returncode})"
                 log["export"]["error"]  = err
                 log["total_duration_s"] = round(time.monotonic() - t0)
@@ -587,6 +655,9 @@ def _run_export_async(notes_root: Path, bin_path: str) -> None:
                     _state["sync_progress"].update({"active": False, "error": err})
                     _state["sync_log"] = log
                 return
+            if benign_noop:
+                # Normalise so the report shows success, not a scary exit code
+                log["export"]["exit_code"] = 0
         except subprocess.TimeoutExpired:
             try: proc.kill()
             except Exception: pass
@@ -635,6 +706,13 @@ def _run_export_async(notes_root: Path, bin_path: str) -> None:
             _state["last_sync"]               = now
             _state["sync_progress"]["active"] = False
             _state["index_progress"]          = {"active": True, "done": 0, "total": 0}
+
+        # Capture the FULL combined log — exporter stderr + cleanup actions in
+        # one continuous stream — so the report's scrollable pane reads like a
+        # terminal window of the whole run, not just the exporter output.
+        with _lock:
+            full = list(_state["sync_progress"].get("lines", []))
+        log["full_log"] = full
 
         # Write a PARTIAL log immediately so the client always has export + cleanup
         # data even if it polls before _wait_for_reindex has written the final log.

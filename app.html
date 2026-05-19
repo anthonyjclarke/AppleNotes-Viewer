@@ -1037,6 +1037,16 @@
       max-height: 280px;
       /* grows taller — full report section collapses this */
     }
+    /* Terminal-style review pane: tall, scrollable, monospace.
+       Applied once the sync completes so the user can scroll the
+       entire run (export + cleanup) up and down at leisure. */
+    .synclog-live-pre.review {
+      max-height: min(52vh, 520px);
+      background: #1c1c1e;
+      color: #d4d4d4;
+      font-size: 11px;
+      line-height: 1.65;
+    }
     .synclog-title-row {
       display: flex;
       align-items: baseline;
@@ -2068,6 +2078,7 @@ document.getElementById("settingsBtn").addEventListener("click", () => {
     liveMeta.textContent  = metaText || "—";
     liveStatus.textContent = "Starting…";
     livePre.textContent    = "(waiting for exporter…)";
+    livePre.classList.remove("review");   // back to live streaming mode
     resetBar(); setBar(null);
     overlay.classList.add("open");
   }
@@ -2222,16 +2233,19 @@ document.getElementById("settingsBtn").addEventListener("click", () => {
       document.getElementById("syncLogModalBar").hidden = true;
       liveStatus.hidden = true;
 
+      // Prefer the full combined log (exporter + cleanup actions) so the pane
+      // reads like a terminal of the whole run; fall back to exporter stderr.
       const ex       = log.export || {};
-      const allLines = ex.stderr_lines || [];
-      const total    = ex.stderr_total  || 0;
+      const fullLog  = (log.full_log && log.full_log.length)
+                         ? log.full_log
+                         : (ex.stderr_lines || []);
       document.getElementById("syncLogLiveLabel").textContent =
-        total > allLines.length
-          ? `Exporter output — ${total.toLocaleString()} lines (last ${allLines.length} shown)`
-          : `Exporter output — ${total.toLocaleString()} line${total !== 1 ? "s" : ""}`;
+        `Full sync log — ${fullLog.length.toLocaleString()} line${fullLog.length !== 1 ? "s" : ""} (scroll to review)`;
       // Update pre with full captured log; scroll to top so the user reads
-      // from the beginning of the sync, top to bottom.
-      livePre.textContent = allLines.length ? allLines.join("\n") : "(no output captured)";
+      // from the beginning of the sync, top to bottom. The "review" class
+      // turns it into a tall, scrollable terminal-style pane.
+      livePre.classList.add("review");
+      livePre.textContent = fullLog.length ? fullLog.join("\n") : "(no output captured)";
       livePre.scrollTop   = 0;
     } else {
       liveSection.hidden = true;
@@ -2254,23 +2268,14 @@ document.getElementById("settingsBtn").addEventListener("click", () => {
   }
 
   // ── Open report from Log button (post-sync re-open) ───────────────
-  // Always shows report-only view (no live section) with collapsible raw output.
+  // Reuses showReport so the re-opened view is identical to the one shown
+  // right after a sync: full scrollable terminal log on top, phase cards below.
   async function openReport() {
     try {
       const r   = await fetch("/api/sync-log");
       const log = await r.json();
       if (!log || log.available === false) return;
-      // Hide live section — re-opening the report shows just the structured cards
-      document.getElementById("syncLogModalBar").hidden = false;  // reset for next live run
-      liveStatus.hidden  = false;
-      liveSection.hidden = true;
-      reportSec.hidden   = false;
-      doneRow.hidden     = false;
-      badge.className    = "synclog-badge done";
-      badge.textContent  = "✓ Done";
-      liveTitle.textContent = "Sync Report";
-      closeBtn.classList.remove("synclog-close-disabled");
-      renderSyncLog(log, true);  // include collapsible raw output
+      showReport(log, true);
       overlay.classList.add("open");
     } catch { /* silent */ }
   }

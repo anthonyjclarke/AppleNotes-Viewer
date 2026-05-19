@@ -27,6 +27,43 @@
 
 ---
 
+## [2.4.7] 19-05-2026
+
+### Fixed
+
+- **Sync no longer fails when there is nothing to export** — `notes-export` exits
+  with a non-zero code when the library is already up to date ("All notes are up to
+  date, nothing to export."). The export phase treated any non-zero exit as a failure,
+  so an unchanged library showed **Sync failed × ERROR** even though the exporter ran
+  perfectly. The export phase now recognises the benign no-op messages ("nothing to
+  export", "all notes are up to date", "no notes to export", "no changes") and treats
+  them as success, normalising the recorded exit code to 0 so the report shows a
+  clean run. Real failures (other non-zero exits) still error as before.
+
+### Added
+
+- **Detailed, scrollable cleanup log** — the attachment cleanup phase now streams
+  exactly what it does into the live output, line by line:
+  - `── Attachment cleanup ──` header
+  - `Scanning (Attachments) folders for orphaned files…`
+  - `  ✗ orphan removed: <note> / <file> (<size>)` per deleted file
+  - `  ✗ empty folder removed: <folder>` per removed empty directory
+  - `  ! could not remove <file>: <error>` if a deletion fails
+  - `Scanned N folders.` and a `✓ Cleanup:` summary line
+  - the consistency-gate skip reason (with a ⚠ prefix) when cleanup is skipped
+
+- **Full combined sync log** — `log["full_log"]` now captures the entire run —
+  exporter stderr **and** cleanup actions — as one continuous stream. The Sync
+  Report's top pane shows this as a **terminal-style review window**: dark
+  background, monospace, tall (up to 52 vh), scrollable up and down so the whole
+  sync can be reviewed at leisure. The pane label reads "Full sync log — N lines
+  (scroll to review)". Re-opening via the **Log** button shows the identical view.
+
+- `_emit_sync_line()` — thread-safe helper that appends one line to the live sync
+  buffer (used by cleanup); `_fmt_size()` — human-readable byte sizes for log lines.
+
+---
+
 ## [2.4.6] 19-05-2026
 
 ### Fixed

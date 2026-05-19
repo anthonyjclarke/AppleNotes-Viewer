@@ -4,7 +4,7 @@
 
 Local single-page web app for browsing and searching Apple Notes exports produced by
 [`apple-notes-exporter`](https://github.com/kzaremski/apple-notes-exporter) CLI.
-v2.4.6 — Python 3 stdlib only, no framework, no build step.
+v2.4.7 — Python 3 stdlib only, no framework, no build step.
 
 ---
 
@@ -103,17 +103,29 @@ stream, >1 line/note — it overshoots the real total). `total` is only set for 
 % bar. Incremental leaves `total` 0 → honest indeterminate sweep, no number. Never
 parse `current`/stderr into a note name (that produced garbage like `1683]`).
 
+**Benign no-op is success** — `notes-export` exits non-zero when there's nothing to
+export ("All notes are up to date, nothing to export."). The export phase scans
+stderr for benign-no-op phrases ("nothing to export", "all notes are up to date",
+"no notes to export", "no changes"); if matched, a non-zero exit is NOT treated as
+failure and `exit_code` is normalised to 0. Never revert to a bare
+`if proc.returncode != 0` failure check — an unchanged library exits non-zero.
+
 **Sync log** — `_state["sync_log"]` is a structured dict built by `_run_export_async`
 across all phases: `{timestamp, type, scheme, export:{duration_s, stderr_lines[-500:],
 stderr_total, exit_code, error}, cleanup:{files_removed, bytes_freed, dirs_removed,
 items:[{note,file,size}], skipped, skip_reason}, reindex:{notes_indexed, duration_s},
-total_duration_s}`.
+full_log:[…], total_duration_s}`. `full_log` is the entire run — exporter stderr +
+cleanup action lines — captured from `sync_progress["lines"]` after cleanup; the
+report's top pane renders it as a tall scrollable terminal (`.synclog-live-pre.review`).
 `_wait_for_reindex` thread writes the final log once `index_progress.active` goes False.
 Served by `GET /api/sync-log`; powers the Sync Report modal. `GET /api/sync` also
 returns `live_lines` — last 50 of `sync_progress["lines"]` — for the live output pane.
 `sync_progress["lines"]` accumulates stderr lines in-memory (capped at 1000; last 800
-kept when trimmed). `_prune_orphan_attachments` returns a dict (not tuple) with `items`
-per deleted file so the modal can show a per-note × per-file cleanup table.
+kept when trimmed). `_emit_sync_line()` is the thread-safe appender used by the cleanup
+phase to stream `✗ orphan removed` / `✗ empty folder removed` lines into that buffer so
+they appear in both the live pane and `full_log`. `_prune_orphan_attachments` returns a
+dict (not tuple) with `items` per deleted file so the modal can show a per-note ×
+per-file cleanup table.
 
 **Sync Report modal flow** — opens *at sync start* in live mode (× disabled); transitions
 to re-index mode when export completes; transitions to report mode (full phase cards) when
