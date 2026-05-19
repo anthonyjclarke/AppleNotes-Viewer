@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 from html.parser import HTMLParser
@@ -139,6 +140,7 @@ _state: dict = {
     "configured_root": "",    # raw string from config — may be invalid; shown in Settings
     "index_progress":  {"active": False, "done": 0, "total": 0},
     "sync_progress":   {"active": False, "done": 0, "total": 0, "current": "", "error": None},
+    "sync_log":        None,   # structured report from the last completed sync
 }
 
 
@@ -296,7 +298,10 @@ def _count_notes_for_progress(bin_path: str) -> int:
     return 0
 
 
-def _prune_orphan_attachments(notes_root: Path) -> tuple[int, int]:
+_DATE_PREFIX_STRIP = re.compile(r'^\d{4}-\d{2}-\d{2} ')
+
+
+def _prune_orphan_attachments(notes_root: Path) -> dict:
     """Delete attachment files left behind when a note's image is replaced.
 
     notes-export is additive at the file level: editing a note to swap an image
@@ -324,13 +329,22 @@ def _prune_orphan_attachments(notes_root: Path) -> tuple[int, int]:
         deleted; note HTML, sibling folders and
         nested directories are never touched
 
-    Returns (files_removed, bytes_freed). Never raises.
+    Returns a dict:
+      {files_removed, bytes_freed, items: [{note, file, size}], skipped, skip_reason}
+    Never raises.
     """
+    result: dict = {
+        "files_removed": 0,
+        "bytes_freed":   0,
+        "items":         [],   # [{note: str, file: str, size: int}, ...]
+        "skipped":       False,
+        "skip_reason":   None,
+    }
     wm = notes_root / "AppleNotesExportSyncWatermark.json"
     try:
         entries = json.loads(wm.read_text(encoding="utf-8")).get("notes", {})
     except Exception:
-        return (0, 0)
+        return result
 
     # Consistency gate: if the export folder is grossly out of sync with its own
     # manifest (interrupted export, external deletion, a cloud-sync tool like
@@ -343,14 +357,16 @@ def _prune_orphan_attachments(notes_root: Path) -> tuple[int, int]:
         if ep.endswith(".html") and (notes_root / ep).is_file():
             present += 1
     if entries and present < 0.75 * len(entries):
+        reason = (
+            f"Attachment cleanup skipped — export folder inconsistent "
+            f"({present} of {len(entries)} notes on disk). "
+            f"Folder may be in a cloud-sync share; see README.")
+        result["skipped"]     = True
+        result["skip_reason"] = reason
         with _lock:
-            _state["sync_progress"]["current"] = (
-                f"Attachment cleanup skipped — export folder inconsistent "
-                f"({present} of {len(entries)} notes on disk). Folder may be in a "
-                f"cloud-sync share; see README.")
-        return (-1, 0)   # sentinel: skipped, not "0 removed"
+            _state["sync_progress"]["current"] = reason
+        return result
 
-    removed = freed = 0
     for entry in entries.values():
         try:
             exported = entry.get("exportedPath", "") or ""
@@ -372,19 +388,27 @@ def _prune_orphan_attachments(notes_root: Path) -> tuple[int, int]:
             if aps and not matched:
                 continue
 
+            # Derive a clean display title for the sync log report.
+            note_title = _DATE_PREFIX_STRIP.sub("", Path(exported).stem)
+
             for child in att_dir.iterdir():
                 if not child.is_file() or child.name in expected:
                     continue
                 try:
                     sz = child.stat().st_size
                     child.unlink()
-                    removed += 1
-                    freed += sz
+                    result["files_removed"] += 1
+                    result["bytes_freed"]   += sz
+                    result["items"].append({
+                        "note": note_title,
+                        "file": child.name,
+                        "size": sz,
+                    })
                 except Exception:
                     pass
         except Exception:
             continue
-    return (removed, freed)
+    return result
 
 
 _DATE_PREFIX_RE = re.compile(r"(?:^|/)\d{4}-\d{2}-\d{2} ")
@@ -428,28 +452,54 @@ def _detect_export_prefix_args(notes_root: Path) -> list[str]:
 
 
 def _run_export_async(notes_root: Path, bin_path: str) -> None:
-    """Run notes-export in a background thread, streaming per-note progress into _state."""
-    def run():
+    """Run notes-export in a background thread, streaming progress into _state.
 
-        # A full export (no watermark yet) has a knowable total — fetch it so the
-        # UI can show a real % bar for the slow first sync. Incremental runs skip
-        # this: the changed-note count is unknowable up front, so the client shows
-        # an indeterminate sweep + live count + current note instead.
+    Builds a structured sync_log dict throughout — covering export timing,
+    all exporter stderr output, orphan cleanup detail, and re-index results —
+    and stores it in _state["sync_log"] once the full sync + re-index completes.
+    The log is available via GET /api/sync-log and powers the Sync Report modal.
+    """
+    def run():
+        t0 = time.monotonic()
+        log: dict = {
+            "timestamp": datetime.now().isoformat(timespec="seconds"),
+            "type":    None,   # "full" | "incremental"
+            "scheme":  None,   # "date_prefix" | "no_prefix"
+            "export": {
+                "duration_s":   0,
+                "stderr_lines": [],   # last ≤500 lines for the UI
+                "stderr_total": 0,    # all lines (may exceed capped list)
+                "exit_code":    None,
+                "error":        None,
+            },
+            "cleanup": {
+                "files_removed": 0, "bytes_freed": 0,
+                "items": [], "skipped": False, "skip_reason": None,
+            },
+            "reindex": {"notes_indexed": 0, "duration_s": 0},
+            "total_duration_s": 0,
+        }
+
+        # ── Phase 1: full-export total (for % bar) ────────────────────
         watermark = notes_root / "AppleNotesExportSyncWatermark.json"
-        if not watermark.exists():
+        is_full   = not watermark.exists()
+        log["type"] = "full" if is_full else "incremental"
+        if is_full:
             total = _count_notes_for_progress(bin_path)
             if total > 0:
                 with _lock:
                     _state["sync_progress"]["total"] = total
 
-        # Match the existing folder's filename scheme so an incremental sync
-        # updates files in place instead of writing a duplicate parallel set.
+        # ── Phase 2: detect filename scheme ───────────────────────────
         prefix_args = _detect_export_prefix_args(notes_root)
+        log["scheme"] = "date_prefix" if prefix_args else "no_prefix"
         if prefix_args:
             with _lock:
                 _state["sync_progress"]["current"] = (
                     "Existing notes use a date prefix — matching scheme…")
 
+        # ── Phase 3: run the exporter ─────────────────────────────────
+        t_export = time.monotonic()
         try:
             proc = subprocess.Popen(
                 [bin_path, "export",
@@ -463,55 +513,96 @@ def _run_export_async(notes_root: Path, bin_path: str) -> None:
                 text=True,
             )
             done = 0
+            stderr_lines: list[str] = []
             for line in proc.stderr:
                 line = line.rstrip()
                 if not line:
                     continue
                 done += 1
+                stderr_lines.append(line)
                 with _lock:
                     _state["sync_progress"]["done"]    = done
                     _state["sync_progress"]["current"] = line[:80]
             proc.wait(timeout=300)
+            log["export"]["duration_s"]   = round(time.monotonic() - t_export)
+            log["export"]["stderr_total"] = done
+            log["export"]["stderr_lines"] = stderr_lines[-500:]  # cap for UI
+            log["export"]["exit_code"]    = proc.returncode
             if proc.returncode != 0:
+                err = f"Export failed (exit {proc.returncode})"
+                log["export"]["error"]  = err
+                log["total_duration_s"] = round(time.monotonic() - t0)
                 with _lock:
-                    _state["sync_progress"].update(
-                        {"active": False, "error": f"Export failed (exit {proc.returncode})"})
+                    _state["sync_progress"].update({"active": False, "error": err})
+                    _state["sync_log"] = log
                 return
         except subprocess.TimeoutExpired:
             try: proc.kill()
             except Exception: pass
+            err = "Export timed out after 5 minutes"
+            log["export"]["error"]      = err
+            log["export"]["duration_s"] = round(time.monotonic() - t_export)
+            log["total_duration_s"]     = round(time.monotonic() - t0)
             with _lock:
-                _state["sync_progress"].update(
-                    {"active": False, "error": "Export timed out after 5 minutes"})
+                _state["sync_progress"].update({"active": False, "error": err})
+                _state["sync_log"] = log
             return
         except Exception as e:
+            log["export"]["error"]      = str(e)
+            log["export"]["duration_s"] = round(time.monotonic() - t_export)
+            log["total_duration_s"]     = round(time.monotonic() - t0)
             with _lock:
                 _state["sync_progress"].update({"active": False, "error": str(e)})
+                _state["sync_log"] = log
             return
 
-        # notes-export never removes attachments superseded by an edit (it is
-        # additive). Sweep each note's "(Attachments)/" folder against the
-        # freshly-written watermark and delete files the note no longer uses.
+        # ── Phase 4: orphan attachment cleanup ────────────────────────
         try:
             with _lock:
                 _state["sync_progress"]["current"] = "Cleaning up replaced attachments…"
-            n_rm, n_by = _prune_orphan_attachments(notes_root)
-            # n_rm == -1 is the "skipped, folder inconsistent" sentinel; the
-            # explanatory status was already set inside the function.
-            if n_rm > 0:
-                msg = (f"Removed {n_rm} orphaned attachment"
-                       f"{'' if n_rm == 1 else 's'} ({n_by // 1024} KB freed)")
+            cleanup = _prune_orphan_attachments(notes_root)
+            log["cleanup"] = cleanup
+            if cleanup.get("skipped"):
+                pass  # status message already set inside _prune_orphan_attachments
+            elif cleanup["files_removed"] > 0:
+                n_rm = cleanup["files_removed"]
+                n_by = cleanup["bytes_freed"]
+                msg  = (f"Removed {n_rm} orphaned attachment"
+                        f"{'s' if n_rm != 1 else ''} ({n_by // 1024} KB freed)")
                 with _lock:
                     _state["sync_progress"]["current"] = msg
+            else:
+                with _lock:
+                    _state["sync_progress"]["current"] = "No orphaned attachments"
         except Exception:
             pass
 
+        # ── Phase 5: kick off re-index ────────────────────────────────
+        t_reindex = time.monotonic()
         now = datetime.now()
         with _lock:
-            _state["last_sync"] = now
+            _state["last_sync"]               = now
             _state["sync_progress"]["active"] = False
-            _state["index_progress"] = {"active": True, "done": 0, "total": 0}
+            _state["index_progress"]          = {"active": True, "done": 0, "total": 0}
         _start_rebuild_async()
+
+        # Finalise the log once indexing completes so the report includes the
+        # real note count and total elapsed time.
+        def _wait_for_reindex():
+            while True:
+                time.sleep(0.5)
+                with _lock:
+                    ip = dict(_state["index_progress"])
+                if not ip.get("active", False):
+                    with _lock:
+                        note_count = len(_state["notes"])
+                    log["reindex"]["notes_indexed"] = note_count
+                    log["reindex"]["duration_s"]    = round(time.monotonic() - t_reindex)
+                    log["total_duration_s"]         = round(time.monotonic() - t0)
+                    with _lock:
+                        _state["sync_log"] = log
+                    break
+        threading.Thread(target=_wait_for_reindex, daemon=True).start()
 
     threading.Thread(target=run, daemon=True).start()
 
@@ -961,6 +1052,14 @@ class Handler(BaseHTTPRequestHandler):
                 "count":         len(state["notes"]),
                 "sync_progress": sync_prog,
             })
+
+        elif path == "/api/sync-log":
+            with _lock:
+                log = _state.get("sync_log")
+            if log:
+                self._json(log)
+            else:
+                self._json({"available": False})
 
         elif path == "/api/index-status":
             with _lock:

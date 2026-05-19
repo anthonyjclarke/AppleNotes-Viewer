@@ -4,6 +4,9 @@
 
 ### To Do
 
+- **sync.sh scheme parity** — port `_detect_export_prefix_args()` logic to bash so
+  standalone `bash sync.sh` also auto-detects the date-prefix scheme, matching the
+  in-app Sync button. Currently only the server-side Sync auto-matches.
 - **Sync progress** — verify verbose output format from `notes-export --verbose` once
   Full Disk Access is granted to Terminal; confirm per-note stderr line count matches
   `done` counter in `sync_progress` state.
@@ -21,6 +24,32 @@
 - **Horizontal rules** — `---` on its own line inside exporter blocks should be
   converted to a `<hr>` element, matching Apple Notes' divider style.
 - when searching highlight the search in the preview pane as well
+
+---
+
+## [2.4.3] 19-05-2026
+
+### Added
+
+- **Sync Report modal** — after every sync a "Sync Report" popup opens automatically
+  and is also accessible via the **Log** button in the sidebar footer at any time.
+  The report shows three phase cards (Export, Attachment cleanup, Re-index), each with
+  a status icon, duration, and context-specific detail:
+  - **Export** — type (Full / Incremental), filename scheme in use, line count from
+    the exporter's verbose output
+  - **Attachment cleanup** — files removed with a per-file table (Note · Filename ·
+    Size), bytes freed, or "No orphaned attachment files"; warning card if the
+    consistency gate tripped
+  - **Re-index** — notes indexed and duration
+  - **Total elapsed time** across all phases
+  - Collapsible **Exporter output** section — full raw stderr from `notes-export`,
+    scrollable, capped at last 500 lines; line count shown in summary header
+- **`GET /api/sync-log`** — new endpoint returns the structured log dict for the
+  last completed sync; powers the modal and persists for the server session
+- **`_prune_orphan_attachments` returns rich dict** — previously returned `(int, int)`;
+  now returns `{files_removed, bytes_freed, items:[{note,file,size}], skipped,
+  skip_reason}` so the sync report can show a per-file cleanup table
+- **`import time`** added to `server.py` — used for `time.monotonic()` phase timing
 
 ---
 

@@ -869,6 +869,153 @@
     }
     .about-credit a:hover { text-decoration: underline; }
 
+    /* ── Sync log modal ───────────────────────────────────────────── */
+    .synclog-modal {
+      background: var(--bg-content);
+      border-radius: 14px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+      width: 560px;
+      max-width: calc(100vw - 40px);
+      max-height: calc(100vh - 60px);
+      overflow-y: auto;
+      padding: 28px 28px 24px;
+      position: relative;
+    }
+    .synclog-meta {
+      font-size: 12px;
+      color: var(--tx-tertiary);
+      margin-bottom: 20px;
+    }
+    .synclog-phase {
+      margin-bottom: 10px;
+      padding: 12px 14px;
+      border-radius: 10px;
+      background: var(--bg-hover);
+    }
+    .synclog-phase-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .synclog-icon {
+      font-size: 13px;
+      width: 20px;
+      text-align: center;
+      flex-shrink: 0;
+    }
+    .synclog-icon.ok   { color: #34C759; }
+    .synclog-icon.fail { color: #FF3B30; }
+    .synclog-icon.warn { color: #FF9500; }
+    .synclog-phase-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--tx-primary);
+      flex: 1;
+    }
+    .synclog-phase-dur {
+      font-size: 12px;
+      color: var(--tx-tertiary);
+      font-variant-numeric: tabular-nums;
+    }
+    .synclog-phase-detail {
+      margin-top: 8px;
+      margin-left: 28px;
+      font-size: 12px;
+      color: var(--tx-secondary);
+      line-height: 1.55;
+    }
+    .synclog-err  { color: #FF3B30; }
+    .synclog-warn { color: #FF9500; }
+    .synclog-cleanup-summary { margin-bottom: 8px; }
+    .synclog-file-table {
+      border: 1px solid var(--divider);
+      border-radius: 8px;
+      overflow: hidden;
+      font-size: 11.5px;
+      max-height: 190px;
+      overflow-y: auto;
+    }
+    .synclog-file-hd,
+    .synclog-file-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 56px;
+      padding: 5px 10px;
+      gap: 0 10px;
+    }
+    .synclog-file-hd {
+      font-weight: 600;
+      font-size: 10.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--tx-tertiary);
+      background: var(--bg-search);
+      position: sticky;
+      top: 0;
+    }
+    .synclog-file-row:nth-child(even) { background: var(--bg-hover); }
+    .synclog-file-row span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+    }
+    .synclog-file-row span:last-child {
+      color: var(--tx-tertiary);
+      text-align: right;
+    }
+    .synclog-divider {
+      border: none;
+      border-top: 1px solid var(--divider);
+      margin: 16px 0 12px;
+    }
+    .synclog-total {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--tx-secondary);
+    }
+    .synclog-details {
+      margin-top: 14px;
+    }
+    .synclog-details-sum {
+      font-size: 12px;
+      color: var(--tx-secondary);
+      cursor: pointer;
+      user-select: none;
+      padding: 2px 0;
+    }
+    .synclog-details-sum:hover { color: var(--tx-primary); }
+    .synclog-pre {
+      margin-top: 10px;
+      background: var(--bg-search);
+      border-radius: 8px;
+      padding: 12px;
+      font-family: "SF Mono", Menlo, "Cascadia Code", monospace;
+      font-size: 10.5px;
+      line-height: 1.6;
+      color: var(--tx-secondary);
+      max-height: 280px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .synclog-btn {
+      background: none;
+      border: 1px solid var(--divider);
+      border-radius: 6px;
+      color: var(--tx-tertiary);
+      cursor: pointer;
+      font-size: 11px;
+      padding: 3px 8px;
+      margin-right: 4px;
+      transition: border-color var(--trans), color var(--trans);
+      vertical-align: middle;
+    }
+    .synclog-btn:hover {
+      border-color: var(--accent);
+      color: var(--tx-primary);
+    }
+    .sync-footer.syncing .synclog-btn { display: none; }
+
     /* ── PDF preview modal ────────────────────────────────────────── */
     .pdf-modal {
       display: none;
@@ -966,6 +1113,7 @@
         <span class="sync-status" id="syncStatus">—</span>
         <div class="sync-bar" id="syncBar"><div class="sync-bar-fill" id="syncBarFill"></div></div>
       </div>
+      <button class="synclog-btn" id="syncLogBtn" title="View last sync report" hidden>Log</button>
       <button class="sync-btn" id="syncBtn" title="Sync notes now">↻ Sync</button>
     </div>
   </aside>
@@ -1028,7 +1176,7 @@
     <button class="about-close" id="aboutClose" title="Close">✕</button>
 
     <div class="about-title" id="aboutTitle">Apple Notes Viewer</div>
-    <div class="about-version">v2.4.1 — Local web viewer for Apple Notes exports</div>
+    <div class="about-version">v2.4.2 — Local web viewer for Apple Notes exports</div>
 
     <p class="about-desc">
       A zero-dependency local web app for browsing and searching your Apple Notes.
@@ -1069,6 +1217,28 @@
       by <a href="https://github.com/kzaremski" target="_blank" rel="noopener">Konstantin Zaremski</a>.
       Many thanks for building and maintaining such a capable utility.
     </div>
+  </div>
+</div>
+
+<!-- ── Sync log modal ────────────────────────────────────────────── -->
+<div class="about-overlay" id="syncLogOverlay">
+  <div class="synclog-modal" role="dialog" aria-modal="true" aria-labelledby="syncLogTitle">
+    <button class="about-close" id="syncLogClose" title="Close">✕</button>
+
+    <div class="about-title" id="syncLogTitle">Sync Report</div>
+    <div class="synclog-meta" id="syncLogMeta">—</div>
+
+    <!-- Phase rows: Export, Cleanup, Re-index — populated by JS -->
+    <div id="syncLogBody"></div>
+
+    <hr class="synclog-divider">
+    <div class="synclog-total" id="syncLogTotal"></div>
+
+    <!-- Raw exporter stderr — collapsible -->
+    <details class="synclog-details" id="syncLogDetails">
+      <summary class="synclog-details-sum" id="syncLogDetailsSummary">Exporter output</summary>
+      <pre class="synclog-pre" id="syncLogPre"></pre>
+    </details>
   </div>
 </div>
 
@@ -1737,6 +1907,154 @@ document.getElementById("settingsBtn").addEventListener("click", () => {
   });
 })();
 
+/* ── Sync Log modal ─────────────────────────────────────────────────── */
+(function () {
+  const overlay = document.getElementById("syncLogOverlay");
+  const logBtn  = document.getElementById("syncLogBtn");
+  const close   = () => overlay.classList.remove("open");
+
+  document.getElementById("syncLogClose").addEventListener("click", close);
+  overlay.addEventListener("click", e => { if (e.target === overlay) close(); });
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && overlay.classList.contains("open")) close();
+  });
+
+  function fmtDur(s) {
+    if (!s || s < 1) return "< 1s";
+    if (s < 60)      return s + "s";
+    return Math.floor(s / 60) + "m " + (s % 60) + "s";
+  }
+  function fmtBytes(b) {
+    if (b >= 1048576) return (b / 1048576).toFixed(1) + " MB";
+    if (b >= 1024)    return Math.round(b / 1024) + " KB";
+    return b + " B";
+  }
+  function fmtDate(iso) {
+    try {
+      return new Date(iso).toLocaleString("en-AU", {
+        day: "numeric", month: "short", year: "numeric",
+        hour: "numeric", minute: "2-digit"
+      });
+    } catch { return iso || "—"; }
+  }
+
+  function renderSyncLog(log) {
+    // Header meta
+    const typeLabel   = log.type === "full" ? "Full export" : "Incremental sync";
+    const schemeLabel = log.scheme === "date_prefix"
+      ? "Date-prefixed filenames (YYYY-MM-DD)"
+      : "No date prefix";
+    document.getElementById("syncLogMeta").textContent =
+      fmtDate(log.timestamp) + "  ·  " + typeLabel + "  ·  " + schemeLabel;
+
+    const body = document.getElementById("syncLogBody");
+    body.innerHTML = "";
+
+    // Helper: append one phase card
+    function addPhase(iconClass, iconChar, label, duration, detailHTML) {
+      const card = document.createElement("div");
+      card.className = "synclog-phase";
+      card.innerHTML = `
+        <div class="synclog-phase-head">
+          <span class="synclog-icon ${iconClass}">${iconChar}</span>
+          <span class="synclog-phase-label">${label}</span>
+          <span class="synclog-phase-dur">${duration}</span>
+        </div>
+        ${detailHTML ? `<div class="synclog-phase-detail">${detailHTML}</div>` : ""}`;
+      body.appendChild(card);
+    }
+
+    // ── Export phase ─────────────────────────────────────────────────
+    const ex = log.export || {};
+    if (ex.error) {
+      addPhase("fail", "✗", "Export", fmtDur(ex.duration_s || 0),
+        `<span class="synclog-err">${ex.error}</span>`);
+    } else {
+      const total = ex.stderr_total || 0;
+      const capped = (ex.stderr_lines || []).length;
+      const lineNote = total > capped
+        ? `${total.toLocaleString()} output lines (last ${capped} shown below)`
+        : `${total.toLocaleString()} output line${total !== 1 ? "s" : ""} from exporter`;
+      addPhase("ok", "✓", "Export", fmtDur(ex.duration_s || 0), lineNote);
+    }
+
+    // ── Cleanup phase ────────────────────────────────────────────────
+    const cl = log.cleanup || {};
+    if (cl.skipped) {
+      addPhase("warn", "⚠", "Attachment cleanup", "—",
+        `<span class="synclog-warn">${cl.skip_reason || "Skipped"}</span>`);
+    } else if ((cl.files_removed || 0) > 0) {
+      const n = cl.files_removed;
+      const b = cl.bytes_freed || 0;
+      let detail = `<div class="synclog-cleanup-summary">${n} orphaned file${n !== 1 ? "s" : ""} removed — ${fmtBytes(b)} freed</div>`;
+      const items = cl.items || [];
+      if (items.length > 0) {
+        detail += `<div class="synclog-file-table">
+          <div class="synclog-file-hd">
+            <span>Note</span><span>File</span><span>Size</span>
+          </div>`;
+        for (const it of items) {
+          detail += `<div class="synclog-file-row">
+            <span title="${it.note}">${it.note}</span>
+            <span title="${it.file}">${it.file}</span>
+            <span>${fmtBytes(it.size || 0)}</span>
+          </div>`;
+        }
+        detail += `</div>`;
+      }
+      addPhase("ok", "✓", "Attachment cleanup", "—", detail);
+    } else {
+      addPhase("ok", "✓", "Attachment cleanup", "—", "No orphaned attachment files");
+    }
+
+    // ── Re-index phase ───────────────────────────────────────────────
+    const ri = log.reindex || {};
+    const noteCount = (ri.notes_indexed || 0).toLocaleString();
+    addPhase("ok", "✓", "Re-index", fmtDur(ri.duration_s || 0),
+      `${noteCount} note${ri.notes_indexed !== 1 ? "s" : ""} indexed`);
+
+    // ── Total ────────────────────────────────────────────────────────
+    document.getElementById("syncLogTotal").textContent =
+      "Total: " + fmtDur(log.total_duration_s || 0);
+
+    // ── Raw exporter output ──────────────────────────────────────────
+    const lines  = ex.stderr_lines || [];
+    const sumEl  = document.getElementById("syncLogDetailsSummary");
+    const ttl    = ex.stderr_total || 0;
+    sumEl.textContent = ttl > lines.length
+      ? `Exporter output — ${ttl.toLocaleString()} lines (last ${lines.length} shown)`
+      : `Exporter output — ${ttl.toLocaleString()} line${ttl !== 1 ? "s" : ""}`;
+    document.getElementById("syncLogPre").textContent =
+      lines.length ? lines.join("\n") : "(no output captured)";
+    document.getElementById("syncLogDetails").removeAttribute("open");
+  }
+
+  async function openSyncLog() {
+    try {
+      const r = await fetch("/api/sync-log");
+      const log = await r.json();
+      if (!log || log.available === false) return;
+      renderSyncLog(log);
+      overlay.classList.add("open");
+    } catch { /* silent */ }
+  }
+
+  // Log button wires up to open the modal
+  logBtn.addEventListener("click", openSyncLog);
+
+  // Called from pollIndexProgress after sync completes
+  window._showSyncLog = () => { logBtn.hidden = false; openSyncLog(); };
+
+  // On load: show the Log button if a prior sync report already exists
+  (async () => {
+    try {
+      const r = await fetch("/api/sync-log");
+      const d = await r.json();
+      if (d && d.available !== false) logBtn.hidden = false;
+    } catch {}
+  })();
+})();
+
 /* ── Sync ───────────────────────────────────────────────────────────── */
 async function loadSyncStatus() {
   try {
@@ -1844,8 +2162,11 @@ async function pollIndexProgress(btn, sta) {
           sta.textContent = "Synced just now";
           btn.disabled = false;
           btn.textContent = "↻ Sync";
+          // Refresh note list then show the sync report modal
           loadFolders().then(loadTags).then(() => {
             updateSearchAllPill(); loadNoteList();
+          }).then(() => {
+            if (window._showSyncLog) window._showSyncLog();
           }).then(resolve);
         }
       }).catch(() => setTimeout(poll, 500));
