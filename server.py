@@ -11,6 +11,7 @@ import threading
 import time
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
+from html import unescape as html_unescape
 from html.parser import HTMLParser
 from urllib.parse import urlparse, parse_qs, unquote
 from datetime import datetime
@@ -298,8 +299,9 @@ def _count_notes_for_progress(bin_path: str) -> int:
     return 0
 
 
-_DATE_PREFIX_STRIP = re.compile(r'^\d{4}-\d{2}-\d{2} ')
-_HREF_SRC_RE       = re.compile(r'''(?:href|src)\s*=\s*["']([^"']+)["']''', re.IGNORECASE)
+_DATE_PREFIX_STRIP    = re.compile(r'^\d{4}-\d{2}-\d{2} ')
+_HREF_SRC_RE          = re.compile(r'''(?:href|src)\s*=\s*["']([^"']+)["']''', re.IGNORECASE)
+_PROGRESS_COUNTER_RE  = re.compile(r'^\[\d+/\d+\]$')   # exporter progress lines e.g. [3/7]
 
 
 def _fmt_size(n: int) -> str:
@@ -352,7 +354,13 @@ def _referenced_attachments(html_path: Path, att_dir: Path) -> "set[str] | None"
         raw = m.group(1)
         if not raw or raw.startswith(("data:", "http:", "https:", "#")):
             continue
-        for candidate in (raw, unquote(raw)):
+        # Try three forms: raw value, URL-decoded, HTML-entity-decoded.
+        # The exporter encodes & as &amp; in attribute values, so a note
+        # titled "Mum & Dad" has attachment paths like
+        # "Mum &amp; Dad (Attachments)/file.png" in the HTML.
+        # unquote() handles %20 etc; html_unescape() handles &amp; → &.
+        for candidate in {raw, unquote(raw),
+                          html_unescape(raw), html_unescape(unquote(raw))}:
             try:
                 p = (html_dir / candidate).resolve()
                 if p.parent == att_abs:
@@ -599,6 +607,23 @@ def _run_export_async(notes_root: Path, bin_path: str) -> None:
                 _state["sync_progress"]["current"] = (
                     "Existing notes use a date prefix — matching scheme…")
 
+        # ── Header lines into the live log ───────────────────────────
+        # Build a readable timestamp matching the app's "D Mon YYYY at H:MM am/pm"
+        # style, then emit context lines so the terminal log is self-describing.
+        _now  = datetime.now()
+        _h12  = _now.hour % 12 or 12
+        _ampm = "am" if _now.hour < 12 else "pm"
+        _mon  = ["Jan","Feb","Mar","Apr","May","Jun",
+                 "Jul","Aug","Sep","Oct","Nov","Dec"][_now.month - 1]
+        _ts   = f"{_now.day} {_mon} {_now.year} at {_h12}:{_now.minute:02d} {_ampm}"
+        _type_label   = "Full export" if is_full else "Incremental sync"
+        _scheme_label = ("Date-prefixed filenames (YYYY-MM-DD)"
+                         if prefix_args else "No date prefix")
+        _emit_sync_line(f"── Sync started {_ts} ──")
+        _emit_sync_line(f"Type: {_type_label}  ·  Scheme: {_scheme_label}")
+        _emit_sync_line("── Exporter output ──")
+        _emit_sync_line("  (✓ = note exported  ·  [N/M] = exporter progress counter: N of M notes done)")
+
         # ── Phase 3: run the exporter ─────────────────────────────────
         t_export = time.monotonic()
         try:
@@ -626,7 +651,15 @@ def _run_export_async(notes_root: Path, bin_path: str) -> None:
                     _state["sync_progress"]["current"] = line[:120]
                     sp_lines = _state["sync_progress"].get("lines")
                     if sp_lines is not None:
-                        sp_lines.append(line)
+                        if _PROGRESS_COUNTER_RE.match(line) and sp_lines:
+                            # Merge "[N/M]" onto the preceding line so it reads
+                            # "✓ Exported: Title  [N/M]" rather than a bare
+                            # counter on its own line. Skip duplicate counters
+                            # (the exporter sometimes emits the same one twice).
+                            if not sp_lines[-1].endswith(line):
+                                sp_lines[-1] = sp_lines[-1] + "  " + line
+                        else:
+                            sp_lines.append(line)
                         # Keep most recent 1000 lines; trim if needed
                         if len(sp_lines) > 1000:
                             del sp_lines[:-800]
@@ -1187,7 +1220,7 @@ class Handler(BaseHTTPRequestHandler):
             last = state["last_sync"]
             with _lock:
                 sync_prog  = dict(_state["sync_progress"])
-                live_lines = list(_state["sync_progress"].get("lines", [])[-50:])
+                live_lines = list(_state["sync_progress"].get("lines", [])[-200:])
             self._json({
                 "last_synced":   last.isoformat() if last else None,
                 "count":         len(state["notes"]),

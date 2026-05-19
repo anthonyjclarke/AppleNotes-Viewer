@@ -27,6 +27,67 @@
 
 ---
 
+## [2.4.8] 20-05-2026
+
+### Fixed
+
+- **Attachment files wrongly deleted for notes with `&` in the title** — the most
+  serious bug in the orphan cleanup. When a note title contains `&` (e.g. "Mum & Dad"),
+  the exporter HTML-encodes the attachment path in `href`/`src` attributes as
+  `Mum &amp; Dad (Attachments)/file.png`. `_referenced_attachments` tried the raw value
+  and the URL-decoded value, but neither affected `&amp;`. The resolved path didn't match
+  the actual folder `Mum & Dad (Attachments)/`, so the file appeared unreferenced and was
+  deleted. Fixed by also trying `html_unescape(raw)` and `html_unescape(unquote(raw))` as
+  candidate paths. Any note title with `&`, `'`, `"`, or other HTML-special characters is
+  now handled correctly.
+
+- **"Sync error" shown at end of every sync** — `showReport()` called
+  `document.getElementById("syncLogLiveLabel").textContent = …` but the element had no
+  `id` attribute, so `getElementById` returned `null` and setting `.textContent` threw a
+  `TypeError`. The outer `catch` in the syncBtn handler caught it and showed "Sync error"
+  even though the sync had completed successfully. Fixed by adding `id="syncLogLiveLabel"`
+  to the div.
+
+- **Log button did nothing** — the same `TypeError` above propagated out of `showReport`
+  inside `openReport()`; the silent `catch {}` swallowed it, so `overlay.classList.add
+  ("open")` never ran and the modal never appeared. Fixed by the same `id` addition.
+
+- **Live output pane scroll leaked to outer modal** — when scrolling the live pre to its
+  boundary, the browser passed the event to the outer `.synclog-modal` container, making
+  it feel impossible to scroll all the way to the top. Fixed with `overscroll-behavior:
+  contain` on `.synclog-pre`.
+
+### Added / Changed
+
+- **Live output pane is always dark** — the dark terminal style (`#1c1c1e` background,
+  `#d4d4d4` text) is now applied during both the live streaming phase and the post-sync
+  review phase; previously it only applied in review mode.
+
+- **Sync log: date/time header and exporter annotation** — the terminal log now opens
+  with three header lines before any exporter output:
+  ```
+  ── Sync started 19 May 2026 at 8:31 pm ──
+  Type: Incremental  ·  Scheme: Date-prefixed filenames (YYYY-MM-DD)
+  ── Exporter output ──
+    (✓ = note exported  ·  [N/M] = exporter progress counter: N of M notes done)
+  ```
+  `[N/M]` progress counter lines are merged onto the preceding `✓ Exported:` line
+  (e.g. `✓ Exported: App  [1/7]`) and deduplicated when the exporter emits the same
+  counter twice, eliminating confusing bare counter lines.
+
+- **Log button shows terminal log only** — reopening via the sidebar **Log** button now
+  shows only the scrollable terminal pane (no phase cards, no Done button). Close with
+  the × button or Escape.
+
+- **Resizable sync report modal** — drag the bottom-right corner handle to resize the
+  modal; minimum 420 × 260 px, maximum near-fullscreen. Default width widened from
+  560 px to 640 px. Scrolls on both axes if content overflows.
+
+- **Live tail extended** — `GET /api/sync` now returns the last 200 stderr lines
+  (was 50) for the live output pane during a running sync.
+
+---
+
 ## [2.4.7] 19-05-2026
 
 ### Fixed

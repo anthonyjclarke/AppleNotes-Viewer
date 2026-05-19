@@ -874,12 +874,15 @@
       background: var(--bg-content);
       border-radius: 14px;
       box-shadow: 0 20px 60px rgba(0,0,0,0.35);
-      width: 560px;
-      max-width: calc(100vw - 40px);
-      max-height: calc(100vh - 60px);
-      overflow-y: auto;
+      width: 640px;
+      min-width: 420px;
+      min-height: 260px;
+      max-width: calc(100vw - 20px);
+      max-height: calc(100vh - 20px);
+      overflow: auto;
       padding: 28px 28px 24px;
       position: relative;
+      resize: both;
     }
     .synclog-meta {
       font-size: 12px;
@@ -995,6 +998,7 @@
       color: var(--tx-secondary);
       max-height: 280px;
       overflow-y: auto;
+      overscroll-behavior: contain;
       white-space: pre-wrap;
       word-break: break-all;
     }
@@ -1035,17 +1039,14 @@
     }
     .synclog-live-pre {
       max-height: 280px;
-      /* grows taller — full report section collapses this */
-    }
-    /* Terminal-style review pane: tall, scrollable, monospace.
-       Applied once the sync completes so the user can scroll the
-       entire run (export + cleanup) up and down at leisure. */
-    .synclog-live-pre.review {
-      max-height: min(52vh, 520px);
       background: #1c1c1e;
       color: #d4d4d4;
       font-size: 11px;
       line-height: 1.65;
+    }
+    /* Review mode: same dark terminal style, just taller. */
+    .synclog-live-pre.review {
+      max-height: 58vh;
     }
     .synclog-title-row {
       display: flex;
@@ -1331,7 +1332,7 @@
       </div>
       <div class="synclog-live-status" id="syncLogLiveStatus">Starting…</div>
 
-      <div class="synclog-live-label">Live output</div>
+      <div class="synclog-live-label" id="syncLogLiveLabel">Live output</div>
       <pre class="synclog-pre synclog-live-pre" id="syncLogLivePre">(waiting for exporter…)</pre>
     </div>
 
@@ -2268,14 +2269,16 @@ document.getElementById("settingsBtn").addEventListener("click", () => {
   }
 
   // ── Open report from Log button (post-sync re-open) ───────────────
-  // Reuses showReport so the re-opened view is identical to the one shown
-  // right after a sync: full scrollable terminal log on top, phase cards below.
+  // Shows only the terminal log pane — the phase cards are for the
+  // post-sync flow; the Log button is just a scrollable log viewer.
   async function openReport() {
     try {
       const r   = await fetch("/api/sync-log");
       const log = await r.json();
       if (!log || log.available === false) return;
       showReport(log, true);
+      reportSec.hidden = true;   // log viewer only — no phase cards
+      doneRow.hidden   = true;   // close via × or Escape
       overlay.classList.add("open");
     } catch { /* silent */ }
   }
