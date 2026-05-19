@@ -27,6 +27,38 @@
 
 ---
 
+## [2.4.5] 19-05-2026
+
+### Fixed
+
+- **Empty sync report after re-index (race condition)** — the report modal showed
+  "0 notes indexed", "0 output lines", and zero timings when the client fetched
+  `/api/sync-log` before `_wait_for_reindex` had finished writing the final log.
+
+  Fixed with two coordinated changes:
+
+  *Server:* a partial log (`log_complete: false`) is written to `_state["sync_log"]`
+  immediately before `_start_rebuild_async()` is called, so the client always has
+  export and cleanup data even if it polls mid-rebuild. `_wait_for_reindex` then
+  sets `log_complete: true` after the index finishes, reducing its polling interval
+  from 0.5 s to 0.2 s to minimise the delay between index completion and the flag.
+
+  *Client:* the sync handler now polls `/api/sync-log` in a 300 ms loop (instead of
+  a single immediate fetch) and waits until `log_complete === true` before rendering
+  the report — guaranteeing the note count, re-index duration, and total elapsed time
+  are all populated.
+
+- **Sequential log view** — the Sync Report modal now keeps the live exporter output
+  visible above the phase cards when transitioning from the live phase to the report
+  phase (`showReport` called with `keepLive=true`). Previously the live section was
+  hidden and the output was only available via the collapsible "Exporter output"
+  details element, making it feel disconnected from the report. Now the full captured
+  output scrolls back to the top and the structured phase cards appear directly below,
+  reading as one continuous sequential log of the sync run. The now-redundant
+  collapsible raw output section is suppressed in this view.
+
+---
+
 ## [2.4.4] 19-05-2026
 
 ### Fixed

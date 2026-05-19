@@ -2110,8 +2110,9 @@ document.getElementById("settingsBtn").addEventListener("click", () => {
     }
   }
 
-  // ── Report mode — replaces live section when done ────────────────
-  function renderSyncLog(log) {
+  // ── Report rendering ─────────────────────────────────────────────
+  // includeRawOutput: false when live log is already shown above the cards
+  function renderSyncLog(log, includeRawOutput = true) {
     const typeLabel   = log.type === "full" ? "Full export" : "Incremental sync";
     const schemeLabel = log.scheme === "date_prefix"
       ? "Date-prefixed filenames (YYYY-MM-DD)" : "No date prefix";
@@ -2142,8 +2143,11 @@ document.getElementById("settingsBtn").addEventListener("click", () => {
     } else {
       const ttl = ex.stderr_total || 0;
       const cap = (ex.stderr_lines || []).length;
-      const note = ttl > cap
-        ? `${ttl.toLocaleString()} output lines (last ${cap} shown below)`
+      // If raw output is shown above, just note the count; no "see below" language
+      const note = includeRawOutput
+        ? (ttl > cap
+            ? `${ttl.toLocaleString()} output lines (last ${cap} shown below)`
+            : `${ttl.toLocaleString()} output line${ttl !== 1 ? "s" : ""} from exporter`)
         : `${ttl.toLocaleString()} output line${ttl !== 1 ? "s" : ""} from exporter`;
       addPhase("ok", "✓", "Export", fmtDur(ex.duration_s || 0), note);
     }
@@ -2182,26 +2186,57 @@ document.getElementById("settingsBtn").addEventListener("click", () => {
     document.getElementById("syncLogTotal").textContent =
       "Total: " + fmtDur(log.total_duration_s || 0);
 
-    // Raw output (collapsible)
-    const lines = ex.stderr_lines || [];
-    const ttl2  = ex.stderr_total || 0;
-    document.getElementById("syncLogDetailsSummary").textContent = ttl2 > lines.length
-      ? `Exporter output — ${ttl2.toLocaleString()} lines (last ${lines.length} shown)`
-      : `Exporter output — ${ttl2.toLocaleString()} line${ttl2 !== 1 ? "s" : ""}`;
-    document.getElementById("syncLogPre").textContent =
-      lines.length ? lines.join("\n") : "(no output captured)";
-    document.getElementById("syncLogDetails").removeAttribute("open");
+    // Raw output — shown as collapsible only when live log isn't already visible
+    const detailsEl = document.getElementById("syncLogDetails");
+    if (includeRawOutput) {
+      detailsEl.hidden = false;
+      const lines = ex.stderr_lines || [];
+      const ttl2  = ex.stderr_total || 0;
+      document.getElementById("syncLogDetailsSummary").textContent = ttl2 > lines.length
+        ? `Exporter output — ${ttl2.toLocaleString()} lines (last ${lines.length} shown)`
+        : `Exporter output — ${ttl2.toLocaleString()} line${ttl2 !== 1 ? "s" : ""}`;
+      document.getElementById("syncLogPre").textContent =
+        lines.length ? lines.join("\n") : "(no output captured)";
+      detailsEl.removeAttribute("open");
+    } else {
+      detailsEl.hidden = true;   // live section above already shows the output
+    }
   }
 
-  function showReport(log) {
-    liveSection.hidden = true;
-    reportSec.hidden   = false;
-    doneRow.hidden     = false;
-    badge.className    = "synclog-badge done";
-    badge.textContent  = "✓ Done";
+  // showReport: called after sync completes.
+  // keepLive=true → live log stays visible above the phase cards (sequential view).
+  // keepLive=false → live section hidden; collapsible raw output shown in report.
+  function showReport(log, keepLive = false) {
+    badge.className       = "synclog-badge done";
+    badge.textContent     = "✓ Done";
     liveTitle.textContent = "Sync Report";
     closeBtn.classList.remove("synclog-close-disabled");
-    renderSyncLog(log);
+
+    if (keepLive) {
+      // Keep the live section visible as the "history" pane at the top.
+      // Replace its streaming content with the full captured log and freeze it.
+      liveSection.hidden = false;
+      document.getElementById("syncLogModalBar").hidden = true;
+      liveStatus.hidden = true;
+
+      const ex       = log.export || {};
+      const allLines = ex.stderr_lines || [];
+      const total    = ex.stderr_total  || 0;
+      document.getElementById("syncLogLiveLabel").textContent =
+        total > allLines.length
+          ? `Exporter output — ${total.toLocaleString()} lines (last ${allLines.length} shown)`
+          : `Exporter output — ${total.toLocaleString()} line${total !== 1 ? "s" : ""}`;
+      // Update pre with full captured log; scroll to top so the user reads
+      // from the beginning of the sync, top to bottom.
+      livePre.textContent = allLines.length ? allLines.join("\n") : "(no output captured)";
+      livePre.scrollTop   = 0;
+    } else {
+      liveSection.hidden = true;
+    }
+
+    reportSec.hidden = false;
+    doneRow.hidden   = false;
+    renderSyncLog(log, !keepLive);  // omit collapsible raw output when live is shown above
   }
 
   function showError(msg) {
@@ -2216,11 +2251,15 @@ document.getElementById("settingsBtn").addEventListener("click", () => {
   }
 
   // ── Open report from Log button (post-sync re-open) ───────────────
+  // Always shows report-only view (no live section) with collapsible raw output.
   async function openReport() {
     try {
       const r   = await fetch("/api/sync-log");
       const log = await r.json();
       if (!log || log.available === false) return;
+      // Hide live section — re-opening the report shows just the structured cards
+      document.getElementById("syncLogModalBar").hidden = false;  // reset for next live run
+      liveStatus.hidden  = false;
       liveSection.hidden = true;
       reportSec.hidden   = false;
       doneRow.hidden     = false;
@@ -2228,7 +2267,7 @@ document.getElementById("settingsBtn").addEventListener("click", () => {
       badge.textContent  = "✓ Done";
       liveTitle.textContent = "Sync Report";
       closeBtn.classList.remove("synclog-close-disabled");
-      renderSyncLog(log);
+      renderSyncLog(log, true);  // include collapsible raw output
       overlay.classList.add("open");
     } catch { /* silent */ }
   }
@@ -2377,16 +2416,26 @@ document.getElementById("syncBtn").addEventListener("click", async () => {
       poll();
     });
 
-    // ── All done — fetch the structured log and show report ───────────
+    // ── All done — poll until log_complete, then show full report ───────
     resetFooter();
     sta.textContent = "Synced just now";
     logBtn.hidden   = false;
 
-    const log = await fetch("/api/sync-log").then(r => r.json());
-    ui.showReport(log && log.available !== false ? log : {
-      timestamp: new Date().toISOString(), type: "incremental", scheme: "no_prefix",
-      export: {}, cleanup: {}, reindex: {}, total_duration_s: 0,
+    const log = await new Promise(resolve => {
+      function poll() {
+        fetch("/api/sync-log").then(r => r.json()).then(d => {
+          if (d && d.log_complete === true) {
+            resolve(d);
+          } else {
+            setTimeout(poll, 300);
+          }
+        }).catch(() => setTimeout(poll, 500));
+      }
+      setTimeout(poll, 300);
     });
+
+    // keepLive=true: exporter output stays visible above the phase cards
+    ui.showReport(log, true);
 
     // Done button: user confirms, THEN the note list refreshes
     doneBtn.onclick = () => {

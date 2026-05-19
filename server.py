@@ -619,13 +619,23 @@ def _run_export_async(notes_root: Path, bin_path: str) -> None:
             _state["last_sync"]               = now
             _state["sync_progress"]["active"] = False
             _state["index_progress"]          = {"active": True, "done": 0, "total": 0}
+
+        # Write a PARTIAL log immediately so the client always has export + cleanup
+        # data even if it polls before _wait_for_reindex has written the final log.
+        # log_complete=False tells the client to keep polling until the full log
+        # (with real note count and total duration) is available.
+        log["log_complete"]     = False
+        log["total_duration_s"] = round(time.monotonic() - t0)
+        with _lock:
+            _state["sync_log"] = dict(log)
+
         _start_rebuild_async()
 
-        # Finalise the log once indexing completes so the report includes the
-        # real note count and total elapsed time.
+        # Finalise the log once indexing completes — updates reindex stats and
+        # sets log_complete=True so the client can render the complete report.
         def _wait_for_reindex():
             while True:
-                time.sleep(0.5)
+                time.sleep(0.2)
                 with _lock:
                     ip = dict(_state["index_progress"])
                 if not ip.get("active", False):
@@ -634,6 +644,7 @@ def _run_export_async(notes_root: Path, bin_path: str) -> None:
                     log["reindex"]["notes_indexed"] = note_count
                     log["reindex"]["duration_s"]    = round(time.monotonic() - t_reindex)
                     log["total_duration_s"]         = round(time.monotonic() - t0)
+                    log["log_complete"]             = True
                     with _lock:
                         _state["sync_log"] = log
                     break
