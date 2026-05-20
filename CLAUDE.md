@@ -4,7 +4,7 @@
 
 Local single-page web app for browsing and searching Apple Notes exports produced by
 [`apple-notes-exporter`](https://github.com/kzaremski/apple-notes-exporter) CLI.
-v2.4.9 — Python 3 stdlib only, no framework, no build step.
+v2.5.0 — Python 3 stdlib only, no framework, no build step.
 
 ---
 

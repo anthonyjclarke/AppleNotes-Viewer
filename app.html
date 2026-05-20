@@ -1270,7 +1270,7 @@
     <button class="about-close" id="aboutClose" title="Close">✕</button>
 
     <div class="about-title" id="aboutTitle">Apple Notes Viewer</div>
-    <div class="about-version">v2.4.4 — Local web viewer for Apple Notes exports</div>
+    <div class="about-version" id="aboutVersion">v2.5.0 — Local web viewer for Apple Notes exports</div>
 
     <p class="about-desc">
       A zero-dependency local web app for browsing and searching your Apple Notes.
@@ -2076,6 +2076,7 @@ document.getElementById("settingsBtn").addEventListener("click", () => {
     badge.className     = "synclog-badge live";
     badge.textContent   = "● Live";
     liveTitle.textContent = "Syncing…";
+    liveMeta.hidden       = false;
     liveMeta.textContent  = metaText || "—";
     liveStatus.textContent = "Starting…";
     livePre.textContent    = "(waiting for exporter…)";
@@ -2112,6 +2113,7 @@ document.getElementById("settingsBtn").addEventListener("click", () => {
   // Transition to re-index phase
   function updateReindex(d) {
     liveTitle.textContent = "Re-indexing…";
+    liveMeta.hidden = true;
     if (d.total === 0) {
       setBar(null); liveStatus.textContent = "Scanning notes folder…";
     } else {
@@ -2233,6 +2235,7 @@ document.getElementById("settingsBtn").addEventListener("click", () => {
       liveSection.hidden = false;
       document.getElementById("syncLogModalBar").hidden = true;
       liveStatus.hidden = true;
+      liveMeta.hidden   = true;
 
       // Prefer the full combined log (exporter + cleanup actions) so the pane
       // reads like a terminal of the whole run; fall back to exporter stderr.
@@ -2506,6 +2509,10 @@ async function init() {
   // If the server is mid-index (async startup), show loading overlay first
   try {
     const st = await fetch("/api/index-status").then(r => r.json());
+    if (st.version) {
+      document.getElementById("aboutVersion").textContent =
+        "v" + st.version + " — Local web viewer for Apple Notes exports";
+    }
     if (st.active) await waitForStartupIndex();
   } catch { /* server not ready yet — proceed anyway */ }
 

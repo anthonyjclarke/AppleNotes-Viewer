@@ -27,6 +27,45 @@
 
 ---
 
+## [2.5.0] 20-05-2026
+
+This is a milestone release. The sync, cleanup, and reporting feature set introduced
+across v2.4.x is now complete and production-tested against a real library of 1,688
+notes. No data loss was observed across repeated sync cycles. All three orphan-cleanup
+guards held correctly in live testing.
+
+### Added
+
+- **`APP_VERSION` constant in `server.py`** — version is now defined in one place and
+  returned by `/api/index-status` as `{"version": "2.5.0", ...}`. Previously version
+  appeared only as a hardcoded string in `app.html`.
+- **About panel reads version dynamically** — `init()` fetches version from
+  `/api/index-status` on startup and updates the About panel. The hardcoded `v2.4.4`
+  string that had been stale since May is replaced. Future version bumps only require
+  updating `APP_VERSION` in `server.py`.
+
+### Fixed
+
+- **"Starting sync" text persisted through Re-indexing and completed Sync Report** —
+  `syncLogLiveMeta` was set to "Starting sync…" when the modal opened and never cleared
+  as the sync progressed. It is now hidden when the re-indexing phase begins
+  (`updateReindex`) and again in `showReport()`, so neither the Re-indexing title nor
+  the completed report shows a stale transient status below it. Restored by `openLive()`
+  at the start of each new sync.
+
+### Testing
+
+Full test run against a 1,688-note iCloud export (1,674 dated notes + 414 epoch-date
+notes + 8 `Unknown Folder` notes):
+
+- Two successive syncs with no note changes — zero files removed on both passes
+- One sync with 9 changed notes — exactly one genuine orphan PDF correctly removed
+- All images preserved across all three runs (`_IMAGE_EXTS` guard confirmed working)
+- Benign no-op exit from `notes-export` handled cleanly (no false "Sync failed")
+- Log button, resizable modal, and PDF inline viewer all verified
+
+---
+
 ## [2.4.9] 20-05-2026
 
 ### Fixed

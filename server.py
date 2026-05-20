@@ -16,9 +16,10 @@ from html.parser import HTMLParser
 from urllib.parse import urlparse, parse_qs, unquote
 from datetime import datetime
 
-BASE_DIR = Path(__file__).parent
-APP_HTML = BASE_DIR / "app.html"
-PORT     = 8765
+BASE_DIR    = Path(__file__).parent
+APP_HTML    = BASE_DIR / "app.html"
+PORT        = 8765
+APP_VERSION = "2.5.0"
 
 _CONFIG_FILE  = BASE_DIR / "config.json"
 _SKIP_FOLDERS = {"Recently Deleted"}   # Apple Notes folders excluded from index
@@ -1276,7 +1277,7 @@ class Handler(BaseHTTPRequestHandler):
             with _lock:
                 prog  = dict(_state["index_progress"])
                 count = len(_state["notes"])
-            self._json({**prog, "count": count})
+            self._json({**prog, "count": count, "version": APP_VERSION})
 
         elif path == "/api/browse":
             # Directory browser used by the settings page file picker.
