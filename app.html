@@ -170,26 +170,105 @@
       border-radius: 8px; flex-shrink: 0;
     }
 
-    /* Tag items — reuse folder-item base, override icon */
-    .tag-icon {
-      font-size: 14px;
-      font-weight: 800;
-      color: var(--accent);
-      width: 20px;
-      text-align: center;
-      flex-shrink: 0;
-      line-height: 1;
-      font-family: -apple-system, BlinkMacSystemFont, monospace;
-    }
-    .folder-item.tag-item .folder-name {
-      font-weight: 400;
-    }
-
     /* Separator between folders and tags */
     .sidebar-divider {
       height: 1px;
       background: var(--divider);
       margin: 6px 14px;
+    }
+
+    /* ── Tag pill grid ────────────────────────────────────────────── */
+    .tag-grid {
+      padding: 4px 10px 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .tag-pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 5px 12px;
+      border-radius: 20px;
+      background: var(--bg-content);
+      border: 1px solid var(--border);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--tx-secondary);
+      cursor: pointer;
+      transition: background var(--trans), border-color var(--trans), color var(--trans);
+      user-select: none;
+      white-space: nowrap;
+      line-height: 1.3;
+    }
+    .tag-pill:hover {
+      background: var(--bg-hover);
+      border-color: var(--accent);
+      color: var(--tx-primary);
+    }
+    .tag-pill.active {
+      background: var(--bg-sel);
+      border-color: var(--accent);
+      color: var(--tx-primary);
+      font-weight: 600;
+    }
+    [data-theme="dark"] .tag-pill { background: var(--bg-list); }
+    [data-theme="dark"] .tag-pill:hover { background: var(--bg-hover); }
+
+    /* ── Startup loading overlay ──────────────────────────────────── */
+    .startup-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 9000;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-app);
+    }
+    .startup-overlay.open { display: flex; }
+    .startup-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      padding: 40px 48px;
+      background: var(--bg-content);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      min-width: 280px;
+    }
+    .startup-icon { font-size: 36px; line-height: 1; }
+    .startup-title {
+      font-size: 17px;
+      font-weight: 600;
+      color: var(--tx-primary);
+    }
+    .startup-bar-track {
+      width: 100%;
+      height: 5px;
+      background: var(--bg-search);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .startup-bar-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 3px;
+      width: 0%;
+      transition: width 0.25s ease;
+    }
+    /* Indeterminate sweep — shown while the file-scan phase has no total yet */
+    @keyframes scan-sweep {
+      0%   { transform: translateX(-150%); }
+      100% { transform: translateX(550%); }
+    }
+    .startup-bar-fill.scanning {
+      width: 22% !important;
+      transition: none;
+      animation: scan-sweep 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+    .startup-label {
+      font-size: 13px;
+      color: var(--tx-secondary);
     }
 
     /* ── Note List Panel ──────────────────────────────────────────── */
@@ -426,13 +505,14 @@
 
     /* Note body typography */
     .note-body {
-      max-width: 740px;
-      margin: 0 auto;
       font-size: 15px;
       line-height: 1.68;
       color: var(--tx-primary);
-      word-break: break-word;
     }
+    /* word-break only on prose — not pre/code/table where it destroys alignment */
+    .note-body p, .note-body li,
+    .note-body h1, .note-body h2, .note-body h3,
+    .note-body h4, .note-body h5, .note-body h6 { word-break: break-word; }
     .note-body h1 {
       font-size: 26px;
       font-weight: 700;
@@ -474,11 +554,42 @@
     .note-body li { margin: 3px 0; }
     .note-body a { color: var(--accent); text-decoration: none; }
     .note-body a:hover { text-decoration: underline; }
-    .note-body embed, .note-body object {
+    /* Collapsed exporter-pre blocks rendered as structured prose */
+    .exporter-prose {
+      margin: 4px 0;
+      font-family: monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      background: var(--bg-search);
+      padding: 10px 14px;
+      border-radius: 6px;
+    }
+    .exporter-h {
+      font-weight: 600;
+      color: var(--tx-primary);
+      margin: 0.9em 0 0.35em;
+      line-height: 1.3;
+      word-break: break-word;
+    }
+    h2.exporter-h { font-size: 1.15em; }
+    h3.exporter-h { font-size: 1.05em; }
+    .exporter-table {
+      white-space: pre;
+      font-family: monospace;
+      font-size: 13px;
+      line-height: 1.5;
+      background: var(--bg-search);
+      padding: 8px 12px;
+      border-radius: 6px;
+      margin: 8px 0;
+      overflow-x: auto;
+      display: block;
+    }
+    .note-body embed, .note-body object, .note-body iframe {
       display: block;
       width: 100%;
       height: 600px;
-      border: none;
+      border: 1px solid rgba(0,0,0,0.1);
       border-radius: var(--radius);
       margin: 8px 0;
     }
@@ -543,19 +654,546 @@
       border-radius: 10px;
       box-shadow: 0 12px 60px rgba(0,0,0,0.6);
     }
+
+    /* ── Sync footer ──────────────────────────────────────────────── */
+    .sync-footer {
+      flex-shrink: 0;
+      padding: 8px 14px 12px;
+      border-top: 1px solid var(--divider);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: background var(--trans);
+    }
+    .sync-footer.syncing {
+      background: rgba(255, 204, 0, 0.09);
+    }
+    .sync-info {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .sync-status {
+      font-size: 11px;
+      color: var(--tx-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      transition: color var(--trans), font-weight var(--trans);
+    }
+    .sync-footer.syncing .sync-status {
+      color: var(--tx-primary);
+      font-weight: 500;
+    }
+    /* Slim progress bar — hidden until a sync is running */
+    .sync-bar {
+      display: none;
+      height: 3px;
+      border-radius: 2px;
+      background: var(--bg-search);
+      overflow: hidden;
+    }
+    .sync-footer.syncing .sync-bar { display: block; }
+    .sync-bar-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: 2px;
+      background: var(--accent);
+      transition: width 0.3s ease;
+    }
+    /* Indeterminate sweep — used when the total is unknown (incremental sync) */
+    .sync-bar-fill.indet {
+      width: 30% !important;
+      transition: none;
+      animation: scan-sweep 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+    .sync-btn {
+      flex-shrink: 0;
+      padding: 4px 10px;
+      border-radius: 7px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--tx-secondary);
+      font-size: 12px;
+      font-family: inherit;
+      cursor: pointer;
+      transition: border-color var(--trans), color var(--trans), background var(--trans);
+    }
+    .sync-btn:hover  { border-color: var(--accent); color: var(--tx-primary); }
+    .sync-btn:disabled { opacity: 0.4; cursor: default; }
+    .sync-footer.syncing .sync-btn {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #1C1C1E;
+      opacity: 1;
+    }
+
+    /* ── Settings gear button ─────────────────────────────────────── */
+    .settings-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 15px;
+      opacity: 0.5;
+      padding: 2px 4px;
+      border-radius: 5px;
+      transition: opacity var(--trans);
+      line-height: 1;
+    }
+    .settings-btn:hover { opacity: 1; }
+
+    /* ── Info button ─────────────────────────────────────────────── */
+    .info-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      border: 1.5px solid var(--tx-tertiary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 600;
+      font-family: Georgia, serif;
+      color: var(--tx-tertiary);
+      opacity: 0.7;
+      padding: 0;
+      line-height: 1;
+      transition: opacity var(--trans), color var(--trans), border-color var(--trans);
+      flex-shrink: 0;
+    }
+    .info-btn:hover {
+      opacity: 1;
+      color: var(--tx-primary);
+      border-color: var(--tx-primary);
+    }
+
+    /* ── About modal ──────────────────────────────────────────────── */
+    .about-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 4000;
+      background: rgba(0,0,0,0.45);
+      align-items: center;
+      justify-content: center;
+    }
+    .about-overlay.open { display: flex; }
+    .about-modal {
+      background: var(--bg-content);
+      border-radius: 14px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+      width: 420px;
+      max-width: calc(100vw - 40px);
+      max-height: calc(100vh - 60px);
+      overflow-y: auto;
+      padding: 28px 28px 24px;
+      position: relative;
+    }
+    .about-close {
+      position: absolute;
+      top: 14px;
+      right: 16px;
+      background: var(--bg-hover);
+      border: none;
+      cursor: pointer;
+      font-size: 16px;
+      color: var(--tx-secondary);
+      line-height: 1;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background var(--trans), color var(--trans);
+    }
+    .about-close:hover { background: var(--bg-search); color: var(--tx-primary); }
+    .about-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--tx-primary);
+      margin-bottom: 2px;
+    }
+    .about-version {
+      font-size: 11px;
+      color: var(--tx-tertiary);
+      margin-bottom: 16px;
+    }
+    .about-desc {
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--tx-secondary);
+      margin-bottom: 16px;
+    }
+    .about-section {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--tx-tertiary);
+      margin: 16px 0 6px;
+    }
+    .about-links {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .about-links a {
+      font-size: 13px;
+      color: var(--accent);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    [data-theme="dark"] .about-links a { color: #FFD60A; }
+    .about-links a:hover { text-decoration: underline; }
+    .about-divider {
+      border: none;
+      border-top: 1px solid var(--divider);
+      margin: 16px 0;
+    }
+    .about-credit {
+      font-size: 12px;
+      color: var(--tx-tertiary);
+      line-height: 1.6;
+    }
+    .about-credit a {
+      color: var(--tx-secondary);
+      text-decoration: none;
+    }
+    .about-credit a:hover { text-decoration: underline; }
+
+    /* ── Sync log modal ───────────────────────────────────────────── */
+    .synclog-modal {
+      background: var(--bg-content);
+      border-radius: 14px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+      width: 640px;
+      min-width: 420px;
+      min-height: 260px;
+      max-width: calc(100vw - 20px);
+      max-height: calc(100vh - 20px);
+      overflow: auto;
+      padding: 28px 28px 24px;
+      position: relative;
+      resize: both;
+    }
+    .synclog-meta {
+      font-size: 12px;
+      color: var(--tx-tertiary);
+      margin-bottom: 20px;
+    }
+    .synclog-phase {
+      margin-bottom: 10px;
+      padding: 12px 14px;
+      border-radius: 10px;
+      background: var(--bg-hover);
+    }
+    .synclog-phase-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .synclog-icon {
+      font-size: 13px;
+      width: 20px;
+      text-align: center;
+      flex-shrink: 0;
+    }
+    .synclog-icon.ok   { color: #34C759; }
+    .synclog-icon.fail { color: #FF3B30; }
+    .synclog-icon.warn { color: #FF9500; }
+    .synclog-phase-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--tx-primary);
+      flex: 1;
+    }
+    .synclog-phase-dur {
+      font-size: 12px;
+      color: var(--tx-tertiary);
+      font-variant-numeric: tabular-nums;
+    }
+    .synclog-phase-detail {
+      margin-top: 8px;
+      margin-left: 28px;
+      font-size: 12px;
+      color: var(--tx-secondary);
+      line-height: 1.55;
+    }
+    .synclog-err  { color: #FF3B30; }
+    .synclog-warn { color: #FF9500; }
+    .synclog-cleanup-summary { margin-bottom: 8px; }
+    .synclog-file-table {
+      border: 1px solid var(--divider);
+      border-radius: 8px;
+      overflow: hidden;
+      font-size: 11.5px;
+      max-height: 190px;
+      overflow-y: auto;
+    }
+    .synclog-file-hd,
+    .synclog-file-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 56px;
+      padding: 5px 10px;
+      gap: 0 10px;
+    }
+    .synclog-file-hd {
+      font-weight: 600;
+      font-size: 10.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--tx-tertiary);
+      background: var(--bg-search);
+      position: sticky;
+      top: 0;
+    }
+    .synclog-file-row:nth-child(even) { background: var(--bg-hover); }
+    .synclog-file-row span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+    }
+    .synclog-file-row span:last-child {
+      color: var(--tx-tertiary);
+      text-align: right;
+    }
+    .synclog-divider {
+      border: none;
+      border-top: 1px solid var(--divider);
+      margin: 16px 0 12px;
+    }
+    .synclog-total {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--tx-secondary);
+    }
+    .synclog-details {
+      margin-top: 14px;
+    }
+    .synclog-details-sum {
+      font-size: 12px;
+      color: var(--tx-secondary);
+      cursor: pointer;
+      user-select: none;
+      padding: 2px 0;
+    }
+    .synclog-details-sum:hover { color: var(--tx-primary); }
+    .synclog-pre {
+      margin-top: 10px;
+      background: var(--bg-search);
+      border-radius: 8px;
+      padding: 12px;
+      font-family: "SF Mono", Menlo, "Cascadia Code", monospace;
+      font-size: 10.5px;
+      line-height: 1.6;
+      color: var(--tx-secondary);
+      max-height: 280px;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    /* Live progress bar inside modal (not tied to .sync-footer) */
+    .synclog-modal-bar {
+      height: 4px;
+      background: var(--bg-search);
+      border-radius: 2px;
+      margin: 10px 0 0;
+      overflow: hidden;
+      display: block;
+    }
+    .synclog-modal-bar-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 2px;
+      width: 0%;
+      transition: width 0.25s ease;
+    }
+    .synclog-modal-bar-fill.indet {
+      width: 40%;
+      animation: scan-sweep 1.4s ease-in-out infinite;
+    }
+    .synclog-live-status {
+      font-size: 12px;
+      color: var(--tx-secondary);
+      margin: 8px 0 0;
+      min-height: 18px;
+      font-variant-numeric: tabular-nums;
+    }
+    .synclog-live-label {
+      font-size: 10.5px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--tx-tertiary);
+      margin: 16px 0 6px;
+    }
+    .synclog-live-pre {
+      max-height: 280px;
+      background: #1c1c1e;
+      color: #d4d4d4;
+      font-size: 11px;
+      line-height: 1.65;
+    }
+    /* Review mode: same dark terminal style, just taller. */
+    .synclog-live-pre.review {
+      max-height: 58vh;
+    }
+    .synclog-title-row {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      margin-bottom: 2px;
+    }
+    .synclog-badge {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      padding: 2px 7px;
+      border-radius: 10px;
+      vertical-align: middle;
+    }
+    .synclog-badge.live {
+      background: #FF3B3022;
+      color: #FF3B30;
+      animation: synclog-pulse 1.4s ease-in-out infinite;
+    }
+    .synclog-badge.done { background: #34C75922; color: #34C759; }
+    @keyframes synclog-pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.4; }
+    }
+    .synclog-done-row {
+      margin-top: 20px;
+      display: flex;
+      justify-content: flex-end;
+    }
+    .synclog-done-btn {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      padding: 10px 22px;
+      transition: opacity 0.15s;
+    }
+    [data-theme="dark"] .synclog-done-btn { color: #1C1C1E; }
+    .synclog-done-btn:hover { opacity: 0.85; }
+    .synclog-close-disabled { pointer-events: none; opacity: 0.3; }
+    .synclog-btn {
+      background: none;
+      border: 1px solid var(--divider);
+      border-radius: 6px;
+      color: var(--tx-tertiary);
+      cursor: pointer;
+      font-size: 11px;
+      padding: 3px 8px;
+      margin-right: 4px;
+      transition: border-color var(--trans), color var(--trans);
+      vertical-align: middle;
+    }
+    .synclog-btn:hover {
+      border-color: var(--accent);
+      color: var(--tx-primary);
+    }
+    .sync-footer.syncing .synclog-btn { display: none; }
+
+    /* ── PDF preview modal ────────────────────────────────────────── */
+    .pdf-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 3000;
+      flex-direction: column;
+      background: rgba(0,0,0,0.82);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+    }
+    .pdf-modal.open { display: flex; }
+    .pdf-modal-bar {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 10px 16px;
+      background: rgba(28,28,30,0.95);
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+    }
+    .pdf-modal-name {
+      flex: 1;
+      font-size: 13px;
+      font-weight: 500;
+      color: #F2F2F7;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .pdf-modal-tab {
+      font-size: 12px;
+      color: #FFCC00;
+      text-decoration: none;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .pdf-modal-tab:hover { text-decoration: underline; }
+    .pdf-modal-close {
+      background: none;
+      border: none;
+      color: #AEAEB2;
+      font-size: 20px;
+      cursor: pointer;
+      flex-shrink: 0;
+      line-height: 1;
+      padding: 0 2px;
+    }
+    .pdf-modal-close:hover { color: #F2F2F7; }
+    .pdf-modal-embed {
+      flex: 1;
+      width: 100%;
+      border: none;
+    }
   </style>
 </head>
 <body>
+
+<!-- ── Startup indexing overlay ──────────────────────────────────────── -->
+<div class="startup-overlay" id="startupOverlay">
+  <div class="startup-card">
+    <div class="startup-icon">📋</div>
+    <div class="startup-title">Loading Notes</div>
+    <div class="startup-bar-track">
+      <div class="startup-bar-fill" id="startupFill"></div>
+    </div>
+    <div class="startup-label" id="startupLabel">Starting…</div>
+  </div>
+</div>
+
 <div class="app">
 
   <!-- ── Sidebar ─────────────────────────────────────────────────── -->
   <aside class="sidebar">
     <div class="sidebar-top">
       <span class="sidebar-title">Notes</span>
-      <div class="toggle-wrap" id="themeToggleWrap" title="Toggle dark mode">
-        <span class="toggle-emoji" id="themeEmoji">☀️</span>
-        <div class="toggle-track" id="themeTrack">
-          <div class="toggle-thumb"></div>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <button class="info-btn" id="infoBtn" title="About">i</button>
+        <button class="settings-btn" id="settingsBtn" title="Settings">⚙️</button>
+        <div class="toggle-wrap" id="themeToggleWrap" title="Toggle dark mode">
+          <span class="toggle-emoji" id="themeEmoji">☀️</span>
+          <div class="toggle-track" id="themeTrack">
+            <div class="toggle-thumb"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -563,7 +1201,19 @@
     <div class="folder-list" id="folderList">
       <!-- Populated by JS -->
     </div>
+
+    <div class="sync-footer">
+      <div class="sync-info">
+        <span class="sync-status" id="syncStatus">—</span>
+        <div class="sync-bar" id="syncBar"><div class="sync-bar-fill" id="syncBarFill"></div></div>
+      </div>
+      <button class="synclog-btn" id="syncLogBtn" title="View last sync report" hidden>Log</button>
+      <button class="sync-btn" id="syncBtn" title="Sync notes now">↻ Sync</button>
+    </div>
   </aside>
+
+  <!-- ── Sidebar ↔ List resize handle ─────────────────────────── -->
+  <div class="resize-handle" id="sidebarResizeHandle"></div>
 
   <!-- ── Note List ───────────────────────────────────────────────── -->
   <div class="list-panel">
@@ -602,6 +1252,109 @@
 <!-- Lightbox -->
 <div class="lightbox" id="lightbox">
   <img id="lightboxImg" src="" alt="">
+</div>
+
+<!-- PDF preview modal -->
+<div class="pdf-modal" id="pdfModal">
+  <div class="pdf-modal-bar">
+    <span class="pdf-modal-name" id="pdfModalName"></span>
+    <a  class="pdf-modal-tab" id="pdfModalTab" href="" target="_blank" rel="noopener">Open in new tab ↗</a>
+    <button class="pdf-modal-close" id="pdfModalClose" title="Close">×</button>
+  </div>
+  <iframe class="pdf-modal-embed" id="pdfModalEmbed" src="" title="PDF preview"></iframe>
+</div>
+
+<!-- ── About modal ──────────────────────────────────────────────── -->
+<div class="about-overlay" id="aboutOverlay">
+  <div class="about-modal" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
+    <button class="about-close" id="aboutClose" title="Close">✕</button>
+
+    <div class="about-title" id="aboutTitle">Apple Notes Viewer</div>
+    <div class="about-version" id="aboutVersion">v2.5.0 — Local web viewer for Apple Notes exports</div>
+
+    <p class="about-desc">
+      A zero-dependency local web app for browsing and searching your Apple Notes.
+      Export your notes once with <strong>apple-notes-exporter</strong>, point the app
+      at the folder, and get a fast three-column interface with full-text search, tag
+      filtering, PDF previews, and light/dark mode — all running entirely on your Mac
+      with no cloud, no accounts, and no internet required.
+    </p>
+
+    <div class="about-section">How to use</div>
+    <p class="about-desc" style="margin-bottom:0">
+      1. Install <em>apple-notes-exporter</em> and run an initial export — pay careful attention to the export format (<code style="font-size:12px;background:var(--bg-search);padding:1px 5px;border-radius:4px;">--format html</code>) and output path options.<br>
+      2. Launch via <strong>Launch Notes.command</strong> or <code style="font-size:12px;background:var(--bg-search);padding:1px 5px;border-radius:4px;">python3 server.py</code> in Terminal.<br>
+      3. On first run, use Settings (⚙️) to select your export folder.<br>
+      4. Press <strong>↻ Sync</strong> anytime to pull in new and changed notes.
+    </p>
+    <p class="about-desc" style="margin-top:10px;margin-bottom:0">
+      Full setup and operational details are in <code style="font-size:12px;background:var(--bg-search);padding:1px 5px;border-radius:4px;">README.md</code> in the project folder.
+    </p>
+
+    <hr class="about-divider">
+
+    <div class="about-section">Built by</div>
+    <div class="about-links">
+      <a href="https://github.com/anthonyjclarke/apple-notes-viewer" target="_blank" rel="noopener">
+        ⌥ github.com/anthonyjclarke/apple-notes-viewer
+      </a>
+      <a href="https://bsky.app/profile/anthonyjclarke.bsky.social" target="_blank" rel="noopener">
+        ◆ @anthonyjclarke.bsky.social
+      </a>
+    </div>
+
+    <hr class="about-divider">
+
+    <div class="about-credit">
+      Notes export powered by
+      <a href="https://github.com/kzaremski/apple-notes-exporter" target="_blank" rel="noopener">apple-notes-exporter</a>
+      by <a href="https://github.com/kzaremski" target="_blank" rel="noopener">Konstantin Zaremski</a>.
+      Many thanks for building and maintaining such a capable utility.
+    </div>
+  </div>
+</div>
+
+<!-- ── Sync log modal ────────────────────────────────────────────── -->
+<div class="about-overlay" id="syncLogOverlay">
+  <div class="synclog-modal" role="dialog" aria-modal="true" aria-labelledby="syncLogLiveTitle">
+    <button class="about-close synclog-close-disabled" id="syncLogClose" title="Close">✕</button>
+
+    <!-- ── Live section — shown while sync is running ── -->
+    <div id="syncLogLiveSection">
+      <div class="synclog-title-row">
+        <div class="about-title" id="syncLogLiveTitle">Sync Report</div>
+        <span class="synclog-badge live" id="syncLogBadge">● Live</span>
+      </div>
+      <div class="synclog-meta" id="syncLogLiveMeta">—</div>
+
+      <div class="synclog-modal-bar" id="syncLogModalBar">
+        <div class="synclog-modal-bar-fill indet" id="syncLogModalBarFill"></div>
+      </div>
+      <div class="synclog-live-status" id="syncLogLiveStatus">Starting…</div>
+
+      <div class="synclog-live-label" id="syncLogLiveLabel">Live output</div>
+      <pre class="synclog-pre synclog-live-pre" id="syncLogLivePre">(waiting for exporter…)</pre>
+    </div>
+
+    <!-- ── Report section — shown once complete ── -->
+    <div id="syncLogReportSection" hidden>
+      <div class="synclog-meta" id="syncLogMeta">—</div>
+      <!-- Phase cards populated by JS -->
+      <div id="syncLogBody"></div>
+      <hr class="synclog-divider">
+      <div class="synclog-total" id="syncLogTotal"></div>
+      <!-- Collapsible raw output -->
+      <details class="synclog-details" id="syncLogDetails">
+        <summary class="synclog-details-sum" id="syncLogDetailsSummary">Exporter output</summary>
+        <pre class="synclog-pre" id="syncLogPre"></pre>
+      </details>
+    </div>
+
+    <!-- ── Done button — shown when complete, user must confirm ── -->
+    <div class="synclog-done-row" id="syncLogDoneRow" hidden>
+      <button class="synclog-done-btn" id="syncLogDoneBtn">Done — return to notes</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -717,7 +1470,7 @@ async function loadFolders() {
 
   document.getElementById("folderList").innerHTML = html;
 
-  document.querySelectorAll(".folder-item:not(.tag-item)").forEach(el => {
+  document.querySelectorAll(".folder-item").forEach(el => {
     el.addEventListener("click", () => {
       currentFolder = el.dataset.folder;
       currentTag    = null;
@@ -725,6 +1478,9 @@ async function loadFolders() {
       searchAll     = false;
       document.getElementById("searchInput").value = "";
       document.querySelectorAll(".folder-item").forEach(e => e.classList.remove("active"));
+      document.querySelectorAll(".tag-pill").forEach(e =>
+        e.classList.toggle("active", e.dataset.tag === "")  // keep "All Tags" active
+      );
       el.classList.add("active");
       updateSearchAllPill();
       loadNoteList();
@@ -740,29 +1496,44 @@ async function loadTags() {
 
   const container = document.getElementById("folderList");
 
+  const allActive = !currentTag ? " active" : "";
   let html = `<div class="sidebar-divider"></div>
-    <div class="folder-section-label">Tags</div>`;
+    <div class="folder-section-label">Tags</div>
+    <div class="tag-grid" id="tagGrid">
+      <div class="tag-pill${allActive}" data-tag="">All Tags</div>`;
 
-  for (const { tag, count } of tags) {
-    const name   = tag.slice(1);                          // strip leading #
+  for (const { tag } of tags) {
     const active = currentTag === tag ? " active" : "";
-    html += `<div class="folder-item tag-item${active}" data-tag="${esc(tag)}">
-      <span class="tag-icon">#</span>
-      <span class="folder-name">${esc(name)}</span>
-      <span class="folder-badge">${count}</span>
-    </div>`;
+    html += `<div class="tag-pill${active}" data-tag="${esc(tag)}">${esc(tag)}</div>`;
   }
+  html += `</div>`;
 
   container.insertAdjacentHTML("beforeend", html);
 
-  container.querySelectorAll(".tag-item").forEach(el => {
-    el.addEventListener("click", () => {
-      currentTag = el.dataset.tag;
-      searchQ    = currentTag;
-      searchAll  = false;           // tag search always uses __all__ internally
-      document.getElementById("searchInput").value = currentTag;
+  container.querySelectorAll(".tag-pill").forEach(pill => {
+    pill.addEventListener("click", () => {
+      const tag = pill.dataset.tag;
+      if (tag) {
+        currentTag = tag;
+        searchQ    = tag;
+        searchAll  = false;
+        document.getElementById("searchInput").value = tag;
+      } else {
+        // "All Tags" — clear tag filter, keep current folder
+        currentTag = null;
+        searchQ    = "";
+        searchAll  = false;
+        document.getElementById("searchInput").value = "";
+      }
       document.querySelectorAll(".folder-item").forEach(e => e.classList.remove("active"));
-      el.classList.add("active");
+      document.querySelectorAll(".tag-pill").forEach(e => e.classList.remove("active"));
+      pill.classList.add("active");
+      // Restore folder highlight if "All Tags" was clicked
+      if (!tag) {
+        document.querySelectorAll(".folder-item").forEach(e =>
+          e.classList.toggle("active", e.dataset.folder === currentFolder)
+        );
+      }
       updateSearchAllPill();
       loadNoteList();
     });
@@ -884,45 +1655,25 @@ async function openNote(file) {
 }
 
 function renderNote(rawHtml, file) {
-  const doc  = new DOMParser().parseFromString(rawHtml, "text/html");
-  const body = doc.body;
-
-  // Determine folder path for static URL rewriting
   const note = allNotes.find(n => n.file === file) || shownNotes.find(n => n.file === file) || {};
 
-  // Rewrite image src: images/UUID.png → /static/{folder}/images/UUID.png
-  // Per-segment encoding preserves "/" separators in multi-level folder paths
-  const folderPath = (note.folder || "").split("/").map(encodeURIComponent).join("/");
-  body.querySelectorAll("img[src]").forEach(img => {
-    const src = img.getAttribute("src") || "";
-    if (src.startsWith("images/")) {
-      img.setAttribute("src", `/static/${folderPath}/${src}`);
-    }
-    img.removeAttribute("style"); // let our CSS control sizing
-  });
+  // Per-segment encoding preserves "/" separators while safely encoding special
+  // characters in folder/file names — including "#" (→ %23) which would otherwise
+  // be treated as a URL fragment delimiter by the browser and truncate the request.
+  const encRelPath = rel => rel.split("/").map(encodeURIComponent).join("/");
+  const folderPath = encRelPath(note.folder || "");
+  const fullDate   = fmtFull(note.date || "");
+  const panel      = document.getElementById("contentPanel");
 
-  // Rewrite attachment hrefs (<a> links)
-  body.querySelectorAll("a[href]").forEach(a => {
-    const href = a.getAttribute("href") || "";
-    if (href.startsWith("attachments/")) {
-      a.setAttribute("href", `/static/${folderPath}/${href}`);
-      a.setAttribute("target", "_blank");
-      a.setAttribute("rel", "noopener");
-    }
-  });
-
-  // Rewrite embedded attachments — Falcon uses <embed src> and sometimes <object data>
-  // for inline PDFs; neither is caught by the <a href> rewriter above
-  body.querySelectorAll("embed[src], object[data]").forEach(el => {
-    const attr = el.tagName === "OBJECT" ? "data" : "src";
-    const val  = el.getAttribute(attr) || "";
-    if (val.startsWith("attachments/")) {
-      el.setAttribute(attr, `/static/${folderPath}/${val}`);
-    }
-  });
-
-  const fullDate = fmtFull(note.date || "");
-  const panel    = document.getElementById("contentPanel");
+  // Step 1 — parse raw HTML, strip inline image styles, plant raw innerHTML into
+  // the live DOM.  We make NO href/src changes in the detached document because
+  // Chrome's innerHTML serialiser can decode percent-encoded characters (e.g.
+  // "%23" → "#") in URL attributes, which breaks later detection logic for notes
+  // whose attachment folder name contains a "#" (e.g. "2019-12-23 Note #health
+  // (Attachments)/file.pdf").  All URL rewriting happens in Step 2 on the real
+  // DOM elements so there is zero serialisation round-trip for any URL.
+  const parsed = new DOMParser().parseFromString(rawHtml, "text/html");
+  parsed.body.querySelectorAll("img").forEach(img => img.removeAttribute("style"));
 
   panel.innerHTML = `
     <div class="content-bar">
@@ -932,7 +1683,196 @@ function renderNote(rawHtml, file) {
       <div class="note-body" id="noteBody"></div>
     </div>`;
 
-  document.getElementById("noteBody").innerHTML = body.innerHTML;
+  document.getElementById("noteBody").innerHTML = parsed.body.innerHTML;
+
+  // Step 2 — rewrite all relative URLs and mark PDF cards in the LIVE DOM.
+  // getAttribute() returns the literal attribute value (never URL-resolves it),
+  // so "#" characters in folder names are read correctly and encoded by encRelPath.
+
+  document.querySelectorAll("#noteBody img[src]").forEach(img => {
+    const src = img.getAttribute("src") || "";
+    if (src && !src.match(/^(https?:|data:|#|\/)/))
+      img.setAttribute("src", `/static/${folderPath}/${encRelPath(src)}`);
+  });
+
+  document.querySelectorAll("#noteBody a[href]").forEach(a => {
+    const href = a.getAttribute("href") || "";
+    if (!href || href.match(/^(https?:|data:|#|\/)/)) return;
+
+    const rewritten = `/static/${folderPath}/${encRelPath(href)}`;
+    a.setAttribute("href",   rewritten);
+    a.setAttribute("target", "_blank");   // safe fallback if modal handler fails
+    a.setAttribute("rel",    "noopener");
+
+    if (!href.toLowerCase().endsWith(".pdf")) return;
+
+    // Mark the <a> itself for the delegated PDF modal listener.
+    a.setAttribute("data-pdf-href", rewritten);
+
+    // apple-notes-exporter card structure:
+    //   flex-card > [emoji-div, wrapper(flex:1) > [<a>, "Scan File" div]]
+    // Mark the wrapper so clicks on "Scan File" text are caught.
+    const wrapper = a.parentElement;
+    if (wrapper && wrapper.id !== "noteBody") {
+      wrapper.setAttribute("data-pdf-href", rewritten);
+      wrapper.style.cursor = "pointer";
+      // Mark the outer card so clicks on the emoji icon (sibling of wrapper) are caught.
+      const card = wrapper.parentElement;
+      if (card && card.id !== "noteBody") {
+        // Use getComputedStyle as fallback in case display comes from a CSS rule
+        // rather than an inline style attribute.
+        const disp = card.style.display || getComputedStyle(card).display;
+        if (disp === "flex") {
+          card.setAttribute("data-pdf-href", rewritten);
+          card.style.cursor = "pointer";
+        }
+      }
+    }
+  });
+
+  // Step 3 — convert PDF embeds and exporter attachment cards to inline iframes.
+  // <embed>/<object> pointing at PDFs: rewrite URL then replace with <iframe>.
+  // Safari does not render <embed type="application/pdf"> reliably.
+  document.querySelectorAll("#noteBody embed[src], #noteBody object[data]").forEach(el => {
+    const attr = el.tagName === "OBJECT" ? "data" : "src";
+    const val  = el.getAttribute(attr) || "";
+    if (!val) return;
+    const src = val.match(/^(https?:|data:|#|\/)/)
+      ? val
+      : `/static/${folderPath}/${encRelPath(val)}`;
+    const toCssLen = v => /^\d+$/.test(v) ? v + "px" : v;
+    const iframe = document.createElement("iframe");
+    iframe.src   = src;
+    iframe.title = decodeURIComponent(src.split("/").pop());
+    iframe.style.width  = toCssLen(el.getAttribute("width")  || "100%");
+    iframe.style.height = toCssLen(el.getAttribute("height") || "600");
+    el.replaceWith(iframe);
+  });
+
+  // apple-notes-exporter PDF attachment cards (<a href> inside a styled flex div):
+  // replace the outermost data-pdf-href element with an inline iframe.
+  // Skip inner elements that are also marked — only process the outermost card.
+  document.querySelectorAll("#noteBody [data-pdf-href]").forEach(el => {
+    if (el.parentElement && el.parentElement.closest("#noteBody [data-pdf-href]")) return;
+    const pdfHref = el.getAttribute("data-pdf-href");
+    const name    = decodeURIComponent(pdfHref.split("/").pop());
+    const iframe  = document.createElement("iframe");
+    iframe.src    = pdfHref;
+    iframe.title  = name;
+    el.replaceWith(iframe);
+  });
+
+  // Step 4 — suppress hashtag-only <h1> headings injected by the exporter.
+  // The real exporter splits "Title #tag" into separate h1 elements per token,
+  // producing <h1>Title </h1><h1>#tag</h1><h1> <br></h1>.  Keep the first
+  // non-empty h1 (the note title); hide any subsequent h1 whose text is solely
+  // #hashtag tokens or whitespace.
+  let _seenTitle = false;
+  document.querySelectorAll("#noteBody h1").forEach(h1 => {
+    const text = h1.textContent.replace(/\s+/g, " ").trim();
+    if (!text) { h1.style.display = "none"; return; }
+    if (!_seenTitle) { _seenTitle = true; return; }
+    if (/^(#[A-Za-zÀ-ɏ]\w*\s*)+$/.test(text)) h1.style.display = "none";
+  });
+
+  // Step 5 — collapse exporter-fragmented <pre> runs into structured prose.
+  // apple-notes-exporter wraps every text segment (heading, bold, table row, prose)
+  // in its own <pre style='...background:#f5f5f5...'> element, producing individual
+  // grey boxes.  Consecutive runs are merged; markdown headings become <h2>/<h3>,
+  // pipe-table rows stay monospace, bullet lines become <li>, ** bold is stripped.
+  (function collapseExporterPre() {
+    const FINGERPRINT = /background:\s*#f5f5f5/;
+    const isExpPre = n =>
+      n.nodeType === Node.ELEMENT_NODE &&
+      n.tagName === "PRE" &&
+      FINGERPRINT.test(n.getAttribute("style") || "");
+
+    const nb = document.getElementById("noteBody");
+    const firstPre = Array.from(nb.querySelectorAll("pre")).find(
+      p => FINGERPRINT.test(p.getAttribute("style") || "")
+    );
+    if (!firstPre) return;
+    const container = firstPre.parentElement;
+
+    // Collect runs of consecutive exporter-pre children.
+    const runs = [];
+    let cur = null;
+    for (const node of container.childNodes) {
+      if (isExpPre(node)) {
+        if (!cur) { cur = []; runs.push(cur); }
+        cur.push(node);
+      } else { cur = null; }
+    }
+
+    runs.forEach(run => {
+      // 1. Merge innerHTML of all pres in the run.
+      let merged = run.map(p => p.innerHTML).join("");
+
+      // 2. Strip ** delimiters: <b>**text**</b> → <strong>text</strong>
+      merged = merged.replace(/<b>\*\*([\s\S]*?)\*\*<\/b>/gi, "<strong>$1</strong>");
+
+      // 3. Split on <br> and classify each logical line.
+      const lines = merged.split(/<br\s*\/?>/gi);
+      const out = [];   // {type:"inline"|"block"|"li", html:string}
+      let tableBuf = [];
+
+      const flushTable = () => {
+        if (!tableBuf.length) return;
+        out.push({ type: "block",
+                   html: `<pre class="exporter-table">${tableBuf.join("\n")}</pre>` });
+        tableBuf = [];
+      };
+
+      for (const raw of lines) {
+        const text = raw.replace(/<[^>]+>/g, "").trim();
+
+        if (/^\|/.test(text)) { tableBuf.push(raw); continue; }
+        flushTable();
+
+        const hdm = text.match(/^(#{1,3})\s+/);
+        if (hdm) {
+          const lvl = hdm[1].length <= 2 ? 2 : 3;
+          out.push({ type: "block",
+                     html: `<h${lvl} class="exporter-h">${raw.replace(/^\s*#{1,3}\s*/, "").trim()}</h${lvl}>` });
+          continue;
+        }
+
+        if (/^-\s/.test(text)) {
+          out.push({ type: "li", html: raw.replace(/^-\s/, "") });
+          continue;
+        }
+
+        out.push({ type: "inline", html: raw });
+      }
+      flushTable();
+
+      // 4. Build final HTML — no <br> adjacent to block elements.
+      let finalHtml = "";
+      let inList = false;
+      for (let i = 0; i < out.length; i++) {
+        const item = out[i];
+        if (item.type === "li") {
+          if (!inList) { finalHtml += "<ul>"; inList = true; }
+          finalHtml += `<li>${item.html}</li>`;
+        } else {
+          if (inList) { finalHtml += "</ul>"; inList = false; }
+          if (item.type === "block") {
+            finalHtml += item.html;
+          } else {
+            if (i > 0 && out[i - 1].type === "inline") finalHtml += "<br>";
+            finalHtml += item.html;
+          }
+        }
+      }
+      if (inList) finalHtml += "</ul>";
+
+      const div = document.createElement("div");
+      div.className = "exporter-prose";
+      div.innerHTML = finalHtml;
+      run[0].replaceWith(div);
+      run.slice(1).forEach(p => p.remove());
+    });
+  })();
 
   // Lightbox for images
   document.querySelectorAll(".note-body img").forEach(img => {
@@ -941,12 +1881,56 @@ function renderNote(rawHtml, file) {
       document.getElementById("lightbox").classList.add("open");
     });
   });
+
+  // PDF links are intercepted via the delegated listener on contentPanel (see below),
+  // which handles any click target inside the card and survives note reloads.
 }
 
 /* ── Lightbox ───────────────────────────────────────────────────────── */
 document.getElementById("lightbox").addEventListener("click", () =>
   document.getElementById("lightbox").classList.remove("open")
 );
+
+/* ── PDF modal ──────────────────────────────────────────────────────── */
+document.getElementById("pdfModalClose").addEventListener("click", () => {
+  document.getElementById("pdfModal").classList.remove("open");
+  document.getElementById("pdfModalEmbed").src = "";   // stop loading
+});
+document.getElementById("pdfModal").addEventListener("click", e => {
+  if (e.target === document.getElementById("pdfModal")) {
+    document.getElementById("pdfModal").classList.remove("open");
+    document.getElementById("pdfModalEmbed").src = "";
+  }
+});
+// PDF link interception — single delegated listener on the persistent contentPanel.
+// Handles clicks anywhere inside an attachment card (emoji icon, "Scan File" text,
+// filename link) without needing re-attachment on each note load.
+document.getElementById("contentPanel").addEventListener("click", e => {
+  // Primary path: data-pdf-href set by renderNote on the <a>, wrapper, and card.
+  let pdfHref = null;
+  const tagged = e.target.closest("[data-pdf-href]");
+  if (tagged) {
+    pdfHref = tagged.getAttribute("data-pdf-href");
+  } else {
+    // Fallback: direct click on an <a> pointing to a PDF (catches any case where
+    // data-pdf-href markup was not applied — e.g. if the URL contained "#" that
+    // confused the rewriter).  The href at this point is whatever the live DOM has
+    // (ideally the already-rewritten /static/… URL).
+    const link = e.target.closest("a[href]");
+    if (link) {
+      const h = link.getAttribute("href") || "";
+      if (h.toLowerCase().endsWith(".pdf")) pdfHref = h;
+    }
+  }
+
+  if (!pdfHref) return;
+  e.preventDefault();
+  const name = decodeURIComponent(pdfHref.split("/").pop());
+  document.getElementById("pdfModalEmbed").src = pdfHref;
+  document.getElementById("pdfModalTab").href  = pdfHref;
+  document.getElementById("pdfModalName").textContent = name;
+  document.getElementById("pdfModal").classList.add("open");
+});
 
 /* ── Search ─────────────────────────────────────────────────────────── */
 const searchInput = document.getElementById("searchInput");
@@ -969,9 +1953,12 @@ function clearSearch() {
   searchQ    = "";
   currentTag = null;
   searchAll  = false;
-  // Restore active state on current folder
+  // Restore active state on current folder; clear all tag pills
   document.querySelectorAll(".folder-item").forEach(e =>
-    e.classList.toggle("active", !e.classList.contains("tag-item") && e.dataset.folder === currentFolder)
+    e.classList.toggle("active", e.dataset.folder === currentFolder)
+  );
+  document.querySelectorAll(".tag-pill").forEach(e =>
+    e.classList.toggle("active", e.dataset.tag === "")  // "All Tags" pill
   );
   updateSearchAllPill();
   loadNoteList();
@@ -979,14 +1966,20 @@ function clearSearch() {
 
 /* ── Keyboard shortcuts ─────────────────────────────────────────────── */
 document.addEventListener("keydown", e => {
-  // Escape: close lightbox or clear search/tag
+  // Escape: close PDF modal, then lightbox, then search
   if (e.key === "Escape") {
+    const pdf = document.getElementById("pdfModal");
+    if (pdf.classList.contains("open")) {
+      pdf.classList.remove("open");
+      document.getElementById("pdfModalEmbed").src = "";
+      return;
+    }
     const lb = document.getElementById("lightbox");
     if (lb.classList.contains("open")) {
       lb.classList.remove("open");
-    } else if (searchInput.value || currentTag) {
-      clearSearch();
+      return;
     }
+    if (searchInput.value || currentTag) clearSearch();
     return;
   }
 
@@ -1010,54 +2003,563 @@ document.addEventListener("keydown", e => {
   }
 });
 
+/* ── Settings button ────────────────────────────────────────────────── */
+document.getElementById("settingsBtn").addEventListener("click", () => {
+  window.location.href = "/settings";
+});
+
+/* ── About modal ────────────────────────────────────────────────────── */
+(function () {
+  const overlay = document.getElementById("aboutOverlay");
+  const open  = () => overlay.classList.add("open");
+  const close = () => overlay.classList.remove("open");
+
+  document.getElementById("infoBtn").addEventListener("click", open);
+  document.getElementById("aboutClose").addEventListener("click", close);
+  overlay.addEventListener("click", e => { if (e.target === overlay) close(); });
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && overlay.classList.contains("open")) close();
+  });
+})();
+
+/* ── Sync Log modal ─────────────────────────────────────────────────── */
+(function () {
+  // DOM refs
+  const overlay      = document.getElementById("syncLogOverlay");
+  const closeBtn     = document.getElementById("syncLogClose");
+  const liveSection  = document.getElementById("syncLogLiveSection");
+  const reportSec    = document.getElementById("syncLogReportSection");
+  const doneRow      = document.getElementById("syncLogDoneRow");
+  const doneBtn      = document.getElementById("syncLogDoneBtn");
+  const badge        = document.getElementById("syncLogBadge");
+  const liveTitle    = document.getElementById("syncLogLiveTitle");
+  const liveMeta     = document.getElementById("syncLogLiveMeta");
+  const liveStatus   = document.getElementById("syncLogLiveStatus");
+  const livePre      = document.getElementById("syncLogLivePre");
+  const barFill      = document.getElementById("syncLogModalBarFill");
+  const logBtn       = document.getElementById("syncLogBtn");
+
+  // ── Helpers ───────────────────────────────────────────────────────
+  function fmtDur(s) {
+    if (!s || s < 1) return "< 1s";
+    if (s < 60)      return s + "s";
+    return Math.floor(s / 60) + "m " + (s % 60) + "s";
+  }
+  function fmtBytes(b) {
+    if (b >= 1048576) return (b / 1048576).toFixed(1) + " MB";
+    if (b >= 1024)    return Math.round(b / 1024) + " KB";
+    return b + " B";
+  }
+  function fmtDate(iso) {
+    try {
+      return new Date(iso).toLocaleString("en-AU", {
+        day: "numeric", month: "short", year: "numeric",
+        hour: "numeric", minute: "2-digit"
+      });
+    } catch { return iso || "—"; }
+  }
+  function setBar(pct /* null = indeterminate */) {
+    if (pct === null) { barFill.classList.add("indet"); }
+    else {
+      barFill.classList.remove("indet");
+      barFill.style.width = Math.max(0, Math.min(100, pct)) + "%";
+    }
+  }
+  function resetBar() { barFill.classList.remove("indet"); barFill.style.width = "0%"; }
+
+  // ── Live mode — opens when sync starts ───────────────────────────
+  function openLive(metaText) {
+    liveSection.hidden  = false;
+    reportSec.hidden    = true;
+    doneRow.hidden      = true;
+    closeBtn.classList.add("synclog-close-disabled");
+    badge.className     = "synclog-badge live";
+    badge.textContent   = "● Live";
+    liveTitle.textContent = "Syncing…";
+    liveMeta.hidden       = false;
+    liveMeta.textContent  = metaText || "—";
+    liveStatus.textContent = "Starting…";
+    livePre.textContent    = "(waiting for exporter…)";
+    livePre.classList.remove("review");   // back to live streaming mode
+    resetBar(); setBar(null);
+    overlay.classList.add("open");
+  }
+
+  // Update live view on each poll tick
+  function updateLive(p, liveLines) {
+    // Append new lines from the server tail
+    if (liveLines && liveLines.length) {
+      livePre.textContent = liveLines.join("\n");
+      livePre.scrollTop   = livePre.scrollHeight;
+    }
+    const cur = p.current || "";
+    if (cur.startsWith("Existing notes")) {
+      setBar(null); liveStatus.textContent = cur;
+    } else if (cur.startsWith("Cleaning up") || cur.startsWith("Removed ")
+               || cur.startsWith("Attachment cleanup") || cur.startsWith("No orphaned")) {
+      setBar(null); liveStatus.textContent = cur;
+    } else if (p.total > 0) {
+      const shown = Math.min(p.done, p.total);
+      const pct   = Math.round(shown / p.total * 100);
+      setBar(pct);
+      liveStatus.textContent =
+        `Exporting — ${pct}% (${shown.toLocaleString()} / ${p.total.toLocaleString()})`;
+    } else {
+      setBar(null);
+      liveStatus.textContent = "Exporting changed notes…";
+    }
+  }
+
+  // Transition to re-index phase
+  function updateReindex(d) {
+    liveTitle.textContent = "Re-indexing…";
+    liveMeta.hidden = true;
+    if (d.total === 0) {
+      setBar(null); liveStatus.textContent = "Scanning notes folder…";
+    } else {
+      const pct = Math.round(d.done / d.total * 100);
+      setBar(pct);
+      liveStatus.textContent =
+        `Re-indexing ${d.done.toLocaleString()} / ${d.total.toLocaleString()} notes`;
+    }
+  }
+
+  // ── Report rendering ─────────────────────────────────────────────
+  // includeRawOutput: false when live log is already shown above the cards
+  function renderSyncLog(log, includeRawOutput = true) {
+    const typeLabel   = log.type === "full" ? "Full export" : "Incremental sync";
+    const schemeLabel = log.scheme === "date_prefix"
+      ? "Date-prefixed filenames (YYYY-MM-DD)" : "No date prefix";
+    document.getElementById("syncLogMeta").textContent =
+      fmtDate(log.timestamp) + "  ·  " + typeLabel + "  ·  " + schemeLabel;
+
+    const body = document.getElementById("syncLogBody");
+    body.innerHTML = "";
+
+    function addPhase(iconClass, iconChar, label, duration, detailHTML) {
+      const card = document.createElement("div");
+      card.className = "synclog-phase";
+      card.innerHTML = `
+        <div class="synclog-phase-head">
+          <span class="synclog-icon ${iconClass}">${iconChar}</span>
+          <span class="synclog-phase-label">${label}</span>
+          <span class="synclog-phase-dur">${duration}</span>
+        </div>
+        ${detailHTML ? `<div class="synclog-phase-detail">${detailHTML}</div>` : ""}`;
+      body.appendChild(card);
+    }
+
+    // Export phase
+    const ex = log.export || {};
+    if (ex.error) {
+      addPhase("fail", "✗", "Export", fmtDur(ex.duration_s || 0),
+        `<span class="synclog-err">${ex.error}</span>`);
+    } else {
+      const ttl = ex.stderr_total || 0;
+      const cap = (ex.stderr_lines || []).length;
+      // If raw output is shown above, just note the count; no "see below" language
+      const note = includeRawOutput
+        ? (ttl > cap
+            ? `${ttl.toLocaleString()} output lines (last ${cap} shown below)`
+            : `${ttl.toLocaleString()} output line${ttl !== 1 ? "s" : ""} from exporter`)
+        : `${ttl.toLocaleString()} output line${ttl !== 1 ? "s" : ""} from exporter`;
+      addPhase("ok", "✓", "Export", fmtDur(ex.duration_s || 0), note);
+    }
+
+    // Cleanup phase
+    const cl = log.cleanup || {};
+    if (cl.skipped) {
+      addPhase("warn", "⚠", "Attachment cleanup", "—",
+        `<span class="synclog-warn">${cl.skip_reason || "Skipped"}</span>`);
+    } else if ((cl.files_removed || 0) > 0 || (cl.dirs_removed || 0) > 0) {
+      const n = cl.files_removed || 0, b = cl.bytes_freed || 0, d = cl.dirs_removed || 0;
+      let summary = [];
+      if (n > 0) summary.push(`${n} orphaned file${n !== 1 ? "s" : ""} removed — ${fmtBytes(b)} freed`);
+      if (d > 0) summary.push(`${d} empty folder${d !== 1 ? "s" : ""} removed`);
+      let detail = `<div class="synclog-cleanup-summary">${summary.join(" · ")}</div>`;
+      if ((cl.items || []).length > 0) {
+        detail += `<div class="synclog-file-table">
+          <div class="synclog-file-hd"><span>Note</span><span>File</span><span>Size</span></div>`;
+        for (const it of cl.items) {
+          detail += `<div class="synclog-file-row">
+            <span title="${it.note}">${it.note}</span>
+            <span title="${it.file}">${it.file}</span>
+            <span>${fmtBytes(it.size || 0)}</span>
+          </div>`;
+        }
+        detail += `</div>`;
+      }
+      addPhase("ok", "✓", "Attachment cleanup", "—", detail);
+    } else {
+      addPhase("ok", "✓", "Attachment cleanup", "—", "No orphaned attachment files or empty folders");
+    }
+
+    // Re-index phase
+    const ri = log.reindex || {};
+    addPhase("ok", "✓", "Re-index", fmtDur(ri.duration_s || 0),
+      `${(ri.notes_indexed || 0).toLocaleString()} note${ri.notes_indexed !== 1 ? "s" : ""} indexed`);
+
+    // Total
+    document.getElementById("syncLogTotal").textContent =
+      "Total: " + fmtDur(log.total_duration_s || 0);
+
+    // Raw output — shown as collapsible only when live log isn't already visible
+    const detailsEl = document.getElementById("syncLogDetails");
+    if (includeRawOutput) {
+      detailsEl.hidden = false;
+      const lines = ex.stderr_lines || [];
+      const ttl2  = ex.stderr_total || 0;
+      document.getElementById("syncLogDetailsSummary").textContent = ttl2 > lines.length
+        ? `Exporter output — ${ttl2.toLocaleString()} lines (last ${lines.length} shown)`
+        : `Exporter output — ${ttl2.toLocaleString()} line${ttl2 !== 1 ? "s" : ""}`;
+      document.getElementById("syncLogPre").textContent =
+        lines.length ? lines.join("\n") : "(no output captured)";
+      detailsEl.removeAttribute("open");
+    } else {
+      detailsEl.hidden = true;   // live section above already shows the output
+    }
+  }
+
+  // showReport: called after sync completes.
+  // keepLive=true → live log stays visible above the phase cards (sequential view).
+  // keepLive=false → live section hidden; collapsible raw output shown in report.
+  function showReport(log, keepLive = false) {
+    badge.className       = "synclog-badge done";
+    badge.textContent     = "✓ Done";
+    liveTitle.textContent = "Sync Report";
+    closeBtn.classList.remove("synclog-close-disabled");
+
+    if (keepLive) {
+      // Keep the live section visible as the "history" pane at the top.
+      // Replace its streaming content with the full captured log and freeze it.
+      liveSection.hidden = false;
+      document.getElementById("syncLogModalBar").hidden = true;
+      liveStatus.hidden = true;
+      liveMeta.hidden   = true;
+
+      // Prefer the full combined log (exporter + cleanup actions) so the pane
+      // reads like a terminal of the whole run; fall back to exporter stderr.
+      const ex       = log.export || {};
+      const fullLog  = (log.full_log && log.full_log.length)
+                         ? log.full_log
+                         : (ex.stderr_lines || []);
+      document.getElementById("syncLogLiveLabel").textContent =
+        `Full sync log — ${fullLog.length.toLocaleString()} line${fullLog.length !== 1 ? "s" : ""} (scroll to review)`;
+      // Update pre with full captured log; scroll to top so the user reads
+      // from the beginning of the sync, top to bottom. The "review" class
+      // turns it into a tall, scrollable terminal-style pane.
+      livePre.classList.add("review");
+      livePre.textContent = fullLog.length ? fullLog.join("\n") : "(no output captured)";
+      livePre.scrollTop   = 0;
+    } else {
+      liveSection.hidden = true;
+    }
+
+    reportSec.hidden = false;
+    doneRow.hidden   = false;
+    renderSyncLog(log, !keepLive);  // omit collapsible raw output when live is shown above
+  }
+
+  function showError(msg) {
+    setBar(null);
+    liveTitle.textContent  = "Sync failed";
+    liveStatus.textContent = msg;
+    badge.className        = "synclog-badge fail";
+    badge.textContent      = "✗ Error";
+    doneRow.hidden         = false;
+    doneBtn.textContent    = "Close";
+    closeBtn.classList.remove("synclog-close-disabled");
+  }
+
+  // ── Open report from Log button (post-sync re-open) ───────────────
+  // Shows only the terminal log pane — the phase cards are for the
+  // post-sync flow; the Log button is just a scrollable log viewer.
+  async function openReport() {
+    try {
+      const r   = await fetch("/api/sync-log");
+      const log = await r.json();
+      if (!log || log.available === false) return;
+      showReport(log, true);
+      reportSec.hidden = true;   // log viewer only — no phase cards
+      doneRow.hidden   = true;   // close via × or Escape
+      overlay.classList.add("open");
+    } catch { /* silent */ }
+  }
+
+  // ── Close / dismiss ───────────────────────────────────────────────
+  function tryClose() {
+    if (closeBtn.classList.contains("synclog-close-disabled")) return;
+    overlay.classList.remove("open");
+  }
+  closeBtn.addEventListener("click", tryClose);
+  overlay.addEventListener("click", e => { if (e.target === overlay) tryClose(); });
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && overlay.classList.contains("open")) tryClose();
+  });
+
+  // ── Expose API for the sync button handler ────────────────────────
+  window._syncLog = { openLive, updateLive, updateReindex, showReport, showError };
+
+  // ── Log button ────────────────────────────────────────────────────
+  logBtn.addEventListener("click", openReport);
+
+  // Show Log button on load if a prior sync report exists
+  (async () => {
+    try {
+      const d = await fetch("/api/sync-log").then(r => r.json());
+      if (d && d.available !== false) logBtn.hidden = false;
+    } catch {}
+  })();
+})();
+
+/* ── Sync ───────────────────────────────────────────────────────────── */
+async function loadSyncStatus() {
+  try {
+    const r = await fetch("/api/sync");
+    const d = await r.json();
+    const el = document.getElementById("syncStatus");
+    if (!d.last_synced) { el.textContent = "Not yet synced"; return; }
+    const diff = Math.round((Date.now() - new Date(d.last_synced)) / 60000);
+    el.textContent = diff < 1   ? "Synced just now"
+      : diff < 60  ? `Synced ${diff}m ago`
+      : `Synced ${Math.round(diff / 60)}h ago`;
+  } catch { /* silent — sync not configured */ }
+}
+
+// NOTE: `p.done` is the count of non-empty stderr lines from `notes-export
+// --verbose`, NOT a note count. The exporter's docs only promise "progress and
+// errors go to stderr" — the format is freeform and unverified, and it emits
+// more than one line per note, so `p.done` can climb past the real note count.
+// For a full export we show a clamped % against the real DB total; for
+// incremental we show an honest indeterminate sweep. Never parse stderr into a
+// note name (that produced garbage like "1683]").
+
+const syncBar     = document.getElementById("syncBar");
+const syncBarFill = document.getElementById("syncBarFill");
+
+function setSyncBar(pct /* number 0-100, or null for indeterminate */) {
+  if (pct === null) {
+    syncBarFill.classList.add("indet");
+  } else {
+    syncBarFill.classList.remove("indet");
+    syncBarFill.style.width = Math.max(0, Math.min(100, pct)) + "%";
+  }
+}
+function resetSyncBar() {
+  syncBarFill.classList.remove("indet");
+  syncBarFill.style.width = "0%";
+}
+
+document.getElementById("syncBtn").addEventListener("click", async () => {
+  const btn    = document.getElementById("syncBtn");
+  const sta    = document.getElementById("syncStatus");
+  const footer = btn.closest(".sync-footer");
+  const logBtn = document.getElementById("syncLogBtn");
+  const ui     = window._syncLog;
+  const doneBtn = document.getElementById("syncLogDoneBtn");
+
+  // Open modal in live mode immediately — before POST even returns
+  ui.openLive("Starting sync…");
+
+  // Minimal footer indicator while modal is the primary UI
+  btn.disabled = true;
+  btn.textContent = "↻ …";
+  sta.textContent = "Syncing…";
+  footer.classList.add("syncing");
+  setSyncBar(null);
+
+  const resetFooter = () => {
+    footer.classList.remove("syncing");
+    resetSyncBar();
+    btn.disabled    = false;
+    btn.textContent = "↻ Sync";
+  };
+
+  try {
+    const r = await fetch("/api/sync", { method: "POST" });
+    const d = await r.json();
+
+    if (d.status === "error") {
+      resetFooter();
+      sta.textContent = "Sync failed";
+      ui.showError(d.message || "Unknown error");
+      doneBtn.onclick = () => {
+        document.getElementById("syncLogOverlay").classList.remove("open");
+      };
+      return;
+    }
+
+    // ── Phase 1: poll export progress, update modal live ─────────────
+    await new Promise(resolve => {
+      function poll() {
+        fetch("/api/sync").then(r => r.json()).then(d => {
+          const p  = d.sync_progress;
+          const ll = d.live_lines || [];
+          if (p && p.error) {
+            resetFooter();
+            sta.textContent = "Sync failed";
+            ui.showError(p.error);
+            doneBtn.onclick = () => {
+              document.getElementById("syncLogOverlay").classList.remove("open");
+            };
+            resolve(); return;
+          }
+          if (p && p.active) {
+            ui.updateLive(p, ll);
+            setTimeout(poll, 300);
+          } else {
+            resolve();
+          }
+        }).catch(() => setTimeout(poll, 500));
+      }
+      poll();
+    });
+
+    // ── Phase 2: poll re-index progress ──────────────────────────────
+    await new Promise(resolve => {
+      function poll() {
+        fetch("/api/index-status").then(r => r.json()).then(d => {
+          if (d.active) {
+            ui.updateReindex(d);
+            setTimeout(poll, 300);
+          } else {
+            resolve();
+          }
+        }).catch(() => setTimeout(poll, 500));
+      }
+      poll();
+    });
+
+    // ── All done — poll until log_complete, then show full report ───────
+    resetFooter();
+    sta.textContent = "Synced just now";
+    logBtn.hidden   = false;
+
+    const log = await new Promise(resolve => {
+      function poll() {
+        fetch("/api/sync-log").then(r => r.json()).then(d => {
+          if (d && d.log_complete === true) {
+            resolve(d);
+          } else {
+            setTimeout(poll, 300);
+          }
+        }).catch(() => setTimeout(poll, 500));
+      }
+      setTimeout(poll, 300);
+    });
+
+    // keepLive=true: exporter output stays visible above the phase cards
+    ui.showReport(log, true);
+
+    // Done button: user confirms, THEN the note list refreshes
+    doneBtn.onclick = () => {
+      document.getElementById("syncLogOverlay").classList.remove("open");
+      loadFolders().then(loadTags).then(() => {
+        updateSearchAllPill(); loadNoteList();
+      });
+    };
+
+  } catch (e) {
+    resetFooter();
+    sta.textContent = "Sync error";
+    ui.showError(e.message || "Unexpected error");
+    doneBtn.onclick = () => {
+      document.getElementById("syncLogOverlay").classList.remove("open");
+    };
+  }
+});
+
+/* ── Startup index wait ─────────────────────────────────────────────── */
+async function waitForStartupIndex() {
+  return new Promise(resolve => {
+    const overlay = document.getElementById("startupOverlay");
+    const fill    = document.getElementById("startupFill");
+    const label   = document.getElementById("startupLabel");
+    overlay.classList.add("open");
+
+    function poll() {
+      fetch("/api/index-status").then(r => r.json()).then(d => {
+        if (d.active) {
+          if (d.total === 0) {
+            // File-scan phase — total is unknown; show indeterminate sweep
+            fill.classList.add("scanning");
+            label.textContent = "Scanning notes folder…";
+          } else {
+            // Indexing phase — total known, show determinate progress
+            fill.classList.remove("scanning");
+            const pct = Math.round(d.done / d.total * 100);
+            fill.style.width = pct + "%";
+            label.textContent = `${d.done.toLocaleString()} of ${d.total.toLocaleString()} notes…`;
+          }
+          setTimeout(poll, 300);
+        } else {
+          fill.classList.remove("scanning");
+          fill.style.width = "100%";
+          label.textContent = `✓ ${d.count.toLocaleString()} notes ready`;
+          setTimeout(() => { overlay.classList.remove("open"); resolve(); }, 500);
+        }
+      }).catch(() => setTimeout(poll, 500));
+    }
+    poll();
+  });
+}
+
 /* ── Init ───────────────────────────────────────────────────────────── */
 async function init() {
+  // If the server is mid-index (async startup), show loading overlay first
+  try {
+    const st = await fetch("/api/index-status").then(r => r.json());
+    if (st.version) {
+      document.getElementById("aboutVersion").textContent =
+        "v" + st.version + " — Local web viewer for Apple Notes exports";
+    }
+    if (st.active) await waitForStartupIndex();
+  } catch { /* server not ready yet — proceed anyway */ }
+
   await loadFolders();
   await loadTags();
   updateSearchAllPill();
   await loadNoteList();
+  loadSyncStatus();   // fire-and-forget
 }
 
 init();
 
-/* ── Resizable list panel ───────────────────────────────────────────── */
+/* ── Resizable panels ───────────────────────────────────────────────── */
 (function () {
-  const handle = document.getElementById("listResizeHandle");
-  const root   = document.documentElement;
-  const MIN_W  = 180;
-  const MAX_W  = 700;
-  const KEY    = "notes-list-w";
+  function makeResizable(handleId, cssVar, minW, maxW, storageKey) {
+    const handle = document.getElementById(handleId);
+    const root   = document.documentElement;
+    const saved  = parseInt(localStorage.getItem(storageKey), 10);
+    if (saved >= minW && saved <= maxW) root.style.setProperty(cssVar, saved + "px");
 
-  const saved = parseInt(localStorage.getItem(KEY), 10);
-  if (saved >= MIN_W && saved <= MAX_W) {
-    root.style.setProperty("--list-w", saved + "px");
+    handle.addEventListener("mousedown", e => {
+      e.preventDefault();
+      const startX = e.clientX;
+      const startW = parseInt(getComputedStyle(root).getPropertyValue(cssVar), 10);
+      handle.classList.add("dragging");
+      document.body.style.cursor     = "col-resize";
+      document.body.style.userSelect = "none";
+
+      function onMove(e) {
+        const w = Math.min(maxW, Math.max(minW, startW + e.clientX - startX));
+        root.style.setProperty(cssVar, w + "px");
+      }
+      function onUp() {
+        handle.classList.remove("dragging");
+        document.body.style.cursor     = "";
+        document.body.style.userSelect = "";
+        localStorage.setItem(storageKey, parseInt(getComputedStyle(root).getPropertyValue(cssVar), 10));
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup",   onUp);
+      }
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup",   onUp);
+    });
   }
 
-  handle.addEventListener("mousedown", e => {
-    e.preventDefault();
-    const startX = e.clientX;
-    const startW = parseInt(getComputedStyle(root).getPropertyValue("--list-w"), 10);
-    handle.classList.add("dragging");
-    document.body.style.cursor    = "col-resize";
-    document.body.style.userSelect = "none";
-
-    function onMove(e) {
-      const w = Math.min(MAX_W, Math.max(MIN_W, startW + e.clientX - startX));
-      root.style.setProperty("--list-w", w + "px");
-    }
-
-    function onUp() {
-      handle.classList.remove("dragging");
-      document.body.style.cursor    = "";
-      document.body.style.userSelect = "";
-      localStorage.setItem(KEY, parseInt(getComputedStyle(root).getPropertyValue("--list-w"), 10));
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup",   onUp);
-    }
-
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup",   onUp);
-  });
+  makeResizable("sidebarResizeHandle", "--sidebar-w", 150, 400, "notes-sidebar-w");
+  makeResizable("listResizeHandle",    "--list-w",    180, 700, "notes-list-w");
 })();
 </script>
 </body>

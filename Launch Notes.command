@@ -1,5 +1,6 @@
 #!/bin/bash
 # Notes Viewer launcher — double-click this file in Finder
+# Pass --sync as an argument, or set AUTO_SYNC=1, to sync before launching.
 
 cd "$(dirname "$0")"
 
@@ -10,6 +11,13 @@ sleep 0.3
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  Notes Viewer"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# Optional pre-launch sync
+if [[ "${1:-}" == "--sync" ]] || [[ "${AUTO_SYNC:-}" == "1" ]]; then
+  echo "  Syncing notes…"
+  bash sync.sh || echo "  ⚠  Sync failed — launching with existing notes"
+  echo ""
+fi
 
 python3 server.py &
 SERVER_PID=$!
