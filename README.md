@@ -2,7 +2,7 @@
 
 A local web app for browsing and searching your Apple Notes exports. Runs entirely on your machine — no cloud, no accounts, no runtime dependencies beyond Python 3.
 
-> **v2.5.0** — Built around [`apple-notes-exporter`](https://github.com/kzaremski/apple-notes-exporter). See [CHANGELOG.md](CHANGELOG.md) for what changed.
+> **v2.6.0** — Built around [`apple-notes-exporter`](https://github.com/kzaremski/apple-notes-exporter). See [CHANGELOG.md](CHANGELOG.md) for what changed.
 
 ---
 

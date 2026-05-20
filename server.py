@@ -19,7 +19,7 @@ from datetime import datetime
 BASE_DIR    = Path(__file__).parent
 APP_HTML    = BASE_DIR / "app.html"
 PORT        = 8765
-APP_VERSION = "2.5.0"
+APP_VERSION = "2.6.0"
 
 _CONFIG_FILE  = BASE_DIR / "config.json"
 _SKIP_FOLDERS = {"Recently Deleted"}   # Apple Notes folders excluded from index
