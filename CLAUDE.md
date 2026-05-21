@@ -43,7 +43,10 @@ folder picker silently fails whenever `notes_root` is `None`.
 
 **Export depth filter** — exporter produces `{Account}/{Folder}/{Title}.html` (depth 3;
 optional `YYYY-MM-DD ` prefix). `len(f.relative_to(notes_root).parts) == 3` is the only
-filter; attachment subdirs (depth 4) skipped. `_SKIP_FOLDERS = {"Recently Deleted"}`.
+filter; attachment subdirs (depth 4) skipped. `_SKIP_FOLDERS = set()` (empty — nothing
+is hard-excluded). `_RECENTLY_DELETED_FOLDERS` (lowercase) = `{"recently deleted",
+"trash", "deleted items"}` — notes in these folders are indexed and shown everywhere but
+flagged `recently_deleted: True` in the note dict and client index. See below.
 
 **Per-segment URL encoding** — folder names can contain `#` (Apple Notes hashtag
 folders). Path segments are encoded individually with `encodeURIComponent` so `#`
@@ -112,20 +115,66 @@ failure and `exit_code` is normalised to 0. Never revert to a bare
 
 **Sync log** — `_state["sync_log"]` is a structured dict built by `_run_export_async`
 across all phases: `{timestamp, type, scheme, export:{duration_s, stderr_lines[-500:],
-stderr_total, exit_code, error}, cleanup:{files_removed, bytes_freed, dirs_removed,
-items:[{note,file,size}], skipped, skip_reason}, reindex:{notes_indexed, duration_s},
-full_log:[…], total_duration_s}`. `full_log` is the entire run — exporter stderr +
-cleanup action lines — captured from `sync_progress["lines"]` after cleanup; the
-report's top pane renders it as a tall scrollable terminal (`.synclog-live-pre.review`).
-`_wait_for_reindex` thread writes the final log once `index_progress.active` goes False.
-Served by `GET /api/sync-log`; powers the Sync Report modal. `GET /api/sync` also
-returns `live_lines` — last 50 of `sync_progress["lines"]` — for the live output pane.
-`sync_progress["lines"]` accumulates stderr lines in-memory (capped at 1000; last 800
-kept when trimmed). `_emit_sync_line()` is the thread-safe appender used by the cleanup
-phase to stream `✗ orphan removed` / `✗ empty folder removed` lines into that buffer so
-they appear in both the live pane and `full_log`. `_prune_orphan_attachments` returns a
-dict (not tuple) with `items` per deleted file so the modal can show a per-note ×
-per-file cleanup table.
+stderr_total, exit_code, error, exporter_total, deleted_notes:[path,…]},
+cleanup:{files_removed, bytes_freed, dirs_removed, items:[{note,file,size}], skipped,
+skip_reason}, reindex:{notes_indexed, duration_s}, drift:{detected, stale_count, indexed,
+exporter_total}, full_log:[…], total_duration_s}`. `full_log` is the entire run —
+exporter stderr + cleanup action lines — captured from `sync_progress["lines"]` after
+cleanup; the report's top pane renders it as a tall scrollable terminal
+(`.synclog-live-pre.review`). `_wait_for_reindex` thread writes the final log once
+`index_progress.active` goes False. Served by `GET /api/sync-log`; powers the Sync
+Report modal. `GET /api/sync` also returns `live_lines` — last 50 of
+`sync_progress["lines"]` — for the live output pane. `sync_progress["lines"]`
+accumulates stderr lines in-memory (capped at 1000; last 800 kept when trimmed).
+`_emit_sync_line()` is the thread-safe appender used by the cleanup phase to stream
+`✗ orphan removed` / `✗ empty folder removed` lines into that buffer so they appear
+in both the live pane and `full_log`. `_prune_orphan_attachments` returns a dict (not
+tuple) with `items` per deleted file so the modal can show a per-note × per-file
+cleanup table.
+
+**Deleted-notes detection** — `apple-notes-exporter --verbose` emits
+`Deleted (no longer in Notes): <path>` lines for notes it previously exported that
+have since been removed from Apple Notes. The exporter updates its watermark for these
+but does **not** delete the HTML from disk. `_DELETED_NOTE_RE` captures these lines
+during the stderr loop; paths are deduplicated and stored in
+`log["export"]["deleted_notes"]`. The Sync Report renders a "Deleted from Apple Notes"
+phase card listing each file with individual **Remove** buttons and a bulk **Remove all**
+button — both call `POST /api/note/delete`. A drift banner is also shown when the
+count-based threshold fires (≥ 10 notes or 2% over the exporter total). The two signals
+are complementary: `deleted_notes` gives exact paths from this sync's verbose output;
+the drift banner catches accumulated old deletions not in that list.
+
+**Force Full Re-export (`reset_sync`)** — `POST /api/sync` accepts
+`{"reset_sync": true}`; the flag flows through to
+`_run_export_async(notes_root, bin_path, reset_sync=True)`, which appends
+`--reset-sync` to the exporter command (still combined with `--incremental` — the
+exporter requires both). The watermark is wiped before the export runs, so every note
+is treated as new and re-exported to its current Apple Notes location. **This is the
+only signal the app has for Apple-Notes-internal folder moves** (most importantly,
+notes moved into Recently Deleted) — the incremental exporter cannot detect them
+because `modificationDate` does not change on a folder move. After a `reset_sync`
+run, `_detect_stale_html_files()` scans the fresh watermark's `exportedPath` set
+against on-disk HTML files at depth 3 and returns those not matched. Results land in
+`log["stale_files"]` as `[{path, title, size}, …]`. The Sync Report renders a "Stale
+HTML files on disk" card with the same per-row Remove + bulk Remove-all pattern as
+"Deleted from Apple Notes". Never call `_detect_stale_html_files()` after a normal
+(non-reset) sync — the cumulative watermark contains entries for notes deleted years
+ago whose files do still exist, so on-disk files would be incorrectly flagged. The
+client wires Force Full Re-export through `confirmForceFullReExport()` →
+`runSync(true)`; both the sidebar `#syncForceLink` and the drift banner's
+`.synclog-force-btn` call into it. The confirmation dialog is intentionally a plain
+`window.confirm()` — modal overlays would conflict with the live sync report opening.
+
+**Recently Deleted indexing** — `_SKIP_FOLDERS` is now empty. Notes in
+`_RECENTLY_DELETED_FOLDERS` are indexed normally but carry `recently_deleted: True` in
+the note dict (not `_`-prefixed, so it passes through to the client index). The client
+uses this field in two places: (1) `renderList()` adds a `.is-deleted-note` CSS class
+and a `.note-deleted-pill` badge (`🗑 Recently Deleted`) between the title row and the
+snippet; (2) `renderNote()` inserts a `.recently-deleted-banner` between the content-bar
+and the scroll area. The sidebar 🗑️ folder icon comes from the existing `is_del` flag
+in `/api/folders` (unchanged). Recently deleted notes appear in All Notes and search —
+they are NOT excluded, only visually distinguished. Do not add "Recently Deleted" back
+to `_SKIP_FOLDERS`; the warning banner is the correct signal for the user.
 
 **Sync Report modal flow** — opens *at sync start* in live mode (× disabled); transitions
 to re-index mode when export completes; transitions to report mode (full phase cards) when
@@ -148,8 +197,14 @@ copy is never referenced by path, so it would always appear orphaned without thi
 `(Attachments)/` folder, skip it entirely. Either all content is base64 (nothing to clean)
 or the HTML is a stale pre-rename copy (wrong match). (3) mtime guard — non-referenced
 files newer than the HTML are skipped; the HTML predates them and cannot be authoritative.
-Watermark used ONLY for the consistency gate (<75% notes present → abort). Never remove
-these guards — each one fixes a real false-deletion class.
+Watermark used ONLY for the consistency gate (<75% notes present → abort). The gate
+denominator is `pre_sync_count` (notes indexed before the export ran), NOT
+`len(watermark_entries)`. The watermark is cumulative — exportedPath is never cleared
+for deleted notes, so `len(entries)` grows over time and falsely triggers the gate on
+healthy folders with accumulated deletions. `pre_sync_count` is captured from
+`len(_state["notes"])` before the export starts and passed into `_prune_orphan_attachments`
+as a parameter. Never revert to `len(entries)` as the denominator. Never remove the
+three deletion guards — each one fixes a real false-deletion class.
 
 ---
 
@@ -184,3 +239,11 @@ these guards — each one fixes a real false-deletion class.
 - Never commit `config.json` — it contains absolute local paths.
 - Never increase the `sleep` in `Launch Notes.command` — the server starts async and
   shows a loading screen; sleeping longer does not fix slow startup.
+- Never delete an HTML file without also removing its watermark entry from
+  `AppleNotesExportSyncWatermark.json`. The incremental exporter skips any note whose
+  watermark `modificationDate` matches Apple Notes — if the entry survives the delete,
+  the exporter sees the note as "already exported, unchanged" and never rewrites it,
+  leaving the viewer with a permanently missing note even though Apple Notes still has
+  it. `POST /api/note/delete` removes the matching entry (keyed by `exportedPath`) as
+  a best-effort step after unlinking the HTML. For notes that are genuinely gone from
+  Apple Notes, removing the entry is harmless — the exporter simply skips them again.

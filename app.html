@@ -470,6 +470,48 @@
       -webkit-box-orient: vertical;
       line-height: 1.45;
     }
+    /* Recently Deleted — note list */
+    .note-item.is-deleted-note .note-title { color: var(--tx-secondary); }
+    .note-item.is-deleted-note.active::before { background: #FF3B30; }
+    .note-deleted-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      font-size: 10.5px;
+      font-weight: 600;
+      padding: 1px 7px 1px 5px;
+      border-radius: 4px;
+      background: rgba(255, 59, 48, 0.10);
+      color: #FF3B30;
+      margin: 3px 0 2px;
+      letter-spacing: 0.01em;
+    }
+    /* Recently Deleted — content pane warning banner */
+    .recently-deleted-banner {
+      display: flex;
+      align-items: flex-start;
+      gap: 11px;
+      padding: 11px 18px 11px 16px;
+      background: rgba(255, 59, 48, 0.06);
+      border-bottom: 1px solid rgba(255, 59, 48, 0.18);
+      flex-shrink: 0;
+    }
+    .recently-deleted-banner-icon {
+      font-size: 16px;
+      flex-shrink: 0;
+      line-height: 1.5;
+    }
+    .recently-deleted-banner-text {
+      font-size: 12.5px;
+      line-height: 1.55;
+      color: var(--tx-secondary);
+    }
+    .recently-deleted-banner-text strong {
+      display: block;
+      font-size: 13px;
+      color: #FF3B30;
+      margin-bottom: 2px;
+    }
 
     /* ── Content Panel ────────────────────────────────────────────── */
     .content-panel {
@@ -482,16 +524,64 @@
     }
 
     .content-bar {
-      text-align: center;
+      position: relative;
       padding: 14px 40px 12px;
       border-bottom: 1px solid var(--divider);
       flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
     .content-date-lbl {
       font-size: 12px;
       color: var(--tx-tertiary);
       font-weight: 500;
       letter-spacing: 0.01em;
+    }
+    /* ── Note delete controls ── */
+    .note-delete-btn {
+      position: absolute;
+      right: 14px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 5px 7px;
+      font-size: 14px;
+      color: var(--tx-tertiary);
+      border-radius: 6px;
+      line-height: 1;
+      opacity: 0;
+      transition: opacity 0.15s, color 0.15s, background 0.15s;
+    }
+    .content-bar:hover .note-delete-btn { opacity: 1; }
+    .note-delete-btn:hover {
+      color: #FF3B30;
+      background: rgba(255, 59, 48, 0.09);
+    }
+    .content-bar-confirm {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+    }
+    .note-delete-confirm-lbl {
+      font-size: 12px;
+      color: var(--tx-secondary);
+    }
+    .note-delete-cancel-btn, .note-delete-ok-btn {
+      font-size: 11.5px;
+      padding: 4px 11px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      font-weight: 500;
+    }
+    .note-delete-cancel-btn {
+      background: var(--bg-search);
+      color: var(--text);
+    }
+    .note-delete-ok-btn {
+      background: #FF3B30;
+      color: #fff;
     }
 
     .content-scroll {
@@ -658,25 +748,27 @@
     /* ── Sync footer ──────────────────────────────────────────────── */
     .sync-footer {
       flex-shrink: 0;
-      padding: 8px 14px 12px;
+      padding: 10px 14px 14px;
       border-top: 1px solid var(--divider);
       display: flex;
-      align-items: center;
+      flex-direction: column;
       gap: 8px;
       transition: background var(--trans);
     }
     .sync-footer.syncing {
       background: rgba(255, 204, 0, 0.09);
     }
-    .sync-info {
-      flex: 1;
-      min-width: 0;
+    /* Top row: status text on left, small Log button on right */
+    .sync-info-row {
       display: flex;
-      flex-direction: column;
-      gap: 5px;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
     }
     .sync-status {
-      font-size: 11px;
+      flex: 1;
+      min-width: 0;
+      font-size: 12px;
       color: var(--tx-secondary);
       white-space: nowrap;
       overflow: hidden;
@@ -703,73 +795,90 @@
       background: var(--accent);
       transition: width 0.3s ease;
     }
-    /* Indeterminate sweep — used when the total is unknown (incremental sync) */
     .sync-bar-fill.indet {
       width: 30% !important;
       transition: none;
       animation: scan-sweep 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
     }
-    .sync-btn {
-      flex-shrink: 0;
-      padding: 4px 10px;
-      border-radius: 7px;
-      border: 1px solid var(--border);
-      background: transparent;
-      color: var(--tx-secondary);
-      font-size: 12px;
-      font-family: inherit;
-      cursor: pointer;
-      transition: border-color var(--trans), color var(--trans), background var(--trans);
-    }
-    .sync-btn:hover  { border-color: var(--accent); color: var(--tx-primary); }
-    .sync-btn:disabled { opacity: 0.4; cursor: default; }
-    .sync-footer.syncing .sync-btn {
-      background: var(--accent);
-      border-color: var(--accent);
-      color: #1C1C1E;
-      opacity: 1;
-    }
-
-    /* ── Settings gear button ─────────────────────────────────────── */
-    .settings-btn {
-      background: none;
-      border: none;
-      cursor: pointer;
-      font-size: 15px;
-      opacity: 0.5;
-      padding: 2px 4px;
-      border-radius: 5px;
-      transition: opacity var(--trans);
-      line-height: 1;
-    }
-    .settings-btn:hover { opacity: 1; }
-
-    /* ── Info button ─────────────────────────────────────────────── */
-    .info-btn {
-      background: none;
-      border: none;
-      cursor: pointer;
-      width: 20px;
-      height: 20px;
-      border-radius: 50%;
-      border: 1.5px solid var(--tx-tertiary);
+    /* Bottom row: two equal-weight action buttons side-by-side */
+    .sync-actions {
       display: flex;
+      gap: 8px;
+    }
+    .sync-action-btn {
+      flex: 1;
+      min-width: 0;
+      display: inline-flex;
       align-items: center;
       justify-content: center;
-      font-size: 12px;
+      gap: 6px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      font-size: 13px;
       font-weight: 600;
-      font-family: Georgia, serif;
-      color: var(--tx-tertiary);
-      opacity: 0.7;
-      padding: 0;
-      line-height: 1;
-      transition: opacity var(--trans), color var(--trans), border-color var(--trans);
+      font-family: inherit;
+      cursor: pointer;
+      transition: background var(--trans), border-color var(--trans),
+                  color var(--trans), opacity var(--trans);
+    }
+    .sync-action-btn svg {
+      width: 15px;
+      height: 15px;
       flex-shrink: 0;
     }
-    .info-btn:hover {
-      opacity: 1;
+    .sync-action-label {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    /* Primary: ↻ Sync — filled accent (Apple Notes' standard "primary" tone) */
+    .sync-action-btn.primary {
+      background: var(--accent);
+      border: 1px solid var(--accent);
+      color: #1C1C1E;
+    }
+    .sync-action-btn.primary:hover:not(:disabled) { opacity: 0.88; }
+    .sync-action-btn.primary:disabled { opacity: 0.5; cursor: default; }
+    /* Force: outlined orange — visually equal weight but signals "different" */
+    .sync-action-btn.force {
+      background: transparent;
+      border: 1px solid rgba(255, 149, 0, 0.55);
+      color: #FF9500;
+    }
+    .sync-action-btn.force:hover:not(:disabled) {
+      background: rgba(255, 149, 0, 0.10);
+      border-color: #FF9500;
+    }
+    .sync-action-btn.force:disabled { opacity: 0.5; cursor: default; }
+    .sync-footer.syncing .sync-action-btn.force { opacity: 0.4; pointer-events: none; }
+
+    /* ── Header icon buttons (info, settings) ────────────────────────
+       SF-Symbols-style 18×18 stroke SVG icons in 28×28 hit targets.
+       Resting colour is tx-secondary so they read clearly without
+       shouting; hover bumps to tx-primary plus a subtle pill background. */
+    .icon-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      width: 28px;
+      height: 28px;
+      border-radius: 7px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--tx-secondary);
+      padding: 0;
+      flex-shrink: 0;
+      transition: color var(--trans), background var(--trans);
+    }
+    .icon-btn:hover {
       color: var(--tx-primary);
-      border-color: var(--tx-primary);
+      background: var(--bg-hover);
+    }
+    .icon-btn svg {
+      width: 18px;
+      height: 18px;
+      display: block;
     }
 
     /* ── About modal ──────────────────────────────────────────────── */
@@ -778,20 +887,22 @@
       position: fixed;
       inset: 0;
       z-index: 4000;
-      background: rgba(0,0,0,0.45);
+      background: rgba(0,0,0,0.50);
       align-items: center;
       justify-content: center;
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
     }
     .about-overlay.open { display: flex; }
     .about-modal {
       background: var(--bg-content);
       border-radius: 14px;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.35);
-      width: 420px;
+      box-shadow: 0 24px 70px rgba(0,0,0,0.40);
+      width: 460px;
       max-width: calc(100vw - 40px);
       max-height: calc(100vh - 60px);
       overflow-y: auto;
-      padding: 28px 28px 24px;
+      padding: 30px 32px 26px;
       position: relative;
     }
     .about-close {
@@ -804,8 +915,8 @@
       font-size: 16px;
       color: var(--tx-secondary);
       line-height: 1;
-      width: 26px;
-      height: 26px;
+      width: 28px;
+      height: 28px;
       border-radius: 50%;
       display: flex;
       align-items: center;
@@ -814,60 +925,129 @@
     }
     .about-close:hover { background: var(--bg-search); color: var(--tx-primary); }
     .about-title {
-      font-size: 18px;
+      font-size: 22px;
       font-weight: 700;
       color: var(--tx-primary);
-      margin-bottom: 2px;
+      letter-spacing: -0.3px;
+      margin-bottom: 4px;
     }
     .about-version {
-      font-size: 11px;
-      color: var(--tx-tertiary);
-      margin-bottom: 16px;
+      font-size: 13px;
+      color: var(--tx-secondary);
+      margin-bottom: 20px;
+      font-weight: 500;
     }
     .about-desc {
-      font-size: 13px;
+      font-size: 14px;
       line-height: 1.6;
-      color: var(--tx-secondary);
+      color: var(--tx-primary);
       margin-bottom: 16px;
     }
+    .about-desc.muted {
+      color: var(--tx-secondary);
+      font-size: 13px;
+    }
     .about-section {
-      font-size: 11px;
-      font-weight: 600;
+      font-size: 11.5px;
+      font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: var(--tx-tertiary);
-      margin: 16px 0 6px;
+      letter-spacing: 0.08em;
+      color: var(--tx-secondary);
+      margin: 20px 0 8px;
     }
     .about-links {
       display: flex;
       flex-direction: column;
-      gap: 5px;
+      gap: 7px;
     }
     .about-links a {
-      font-size: 13px;
-      color: var(--accent);
+      font-size: 13.5px;
+      color: #0071E3;       /* Apple link blue — far better contrast than yellow */
       text-decoration: none;
-      display: flex;
+      display: inline-flex;
       align-items: center;
-      gap: 6px;
+      gap: 7px;
+      font-weight: 500;
+      transition: color var(--trans);
     }
-    [data-theme="dark"] .about-links a { color: #FFD60A; }
     .about-links a:hover { text-decoration: underline; }
+    .about-links a svg {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+      color: var(--tx-secondary);
+    }
+    [data-theme="dark"] .about-links a { color: #0A84FF; }
     .about-divider {
       border: none;
       border-top: 1px solid var(--divider);
-      margin: 16px 0;
+      margin: 20px 0;
     }
-    .about-credit {
-      font-size: 12px;
-      color: var(--tx-tertiary);
-      line-height: 1.6;
+    /* ── Featured credit card for the exporter author ─────────────────
+       Used to be a faint two-line footnote — promoted to a styled card
+       with a left accent stripe so it reads as a deliberate acknowledgment
+       rather than fine print. */
+    .about-credit-card {
+      background: linear-gradient(180deg,
+        rgba(255, 204, 0, 0.10),
+        rgba(255, 204, 0, 0.04));
+      border: 1px solid rgba(255, 204, 0, 0.30);
+      border-left: 4px solid var(--accent);
+      border-radius: 10px;
+      padding: 16px 18px 15px;
+      margin-top: 8px;
     }
-    .about-credit a {
-      color: var(--tx-secondary);
+    [data-theme="dark"] .about-credit-card {
+      background: linear-gradient(180deg,
+        rgba(255, 204, 0, 0.10),
+        rgba(255, 204, 0, 0.03));
+      border-color: rgba(255, 204, 0, 0.32);
+    }
+    .about-credit-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #8A6D00;
+      margin-bottom: 6px;
+    }
+    [data-theme="dark"] .about-credit-eyebrow { color: #FFD60A; }
+    .about-credit-eyebrow svg { width: 13px; height: 13px; }
+    .about-credit-headline {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--tx-primary);
+      line-height: 1.35;
+      margin-bottom: 4px;
+    }
+    .about-credit-headline a {
+      color: var(--tx-primary);
       text-decoration: none;
+      border-bottom: 1.5px solid rgba(255, 204, 0, 0.55);
+      transition: border-color var(--trans);
     }
-    .about-credit a:hover { text-decoration: underline; }
+    .about-credit-headline a:hover { border-color: var(--accent); }
+    .about-credit-author {
+      font-size: 13px;
+      color: var(--tx-secondary);
+      margin-bottom: 9px;
+    }
+    .about-credit-author a {
+      color: #0071E3;
+      text-decoration: none;
+      font-weight: 600;
+    }
+    [data-theme="dark"] .about-credit-author a { color: #0A84FF; }
+    .about-credit-author a:hover { text-decoration: underline; }
+    .about-credit-thanks {
+      font-size: 12.5px;
+      line-height: 1.55;
+      color: var(--tx-secondary);
+      margin: 0;
+    }
 
     /* ── Sync log modal ───────────────────────────────────────────── */
     .synclog-modal {
@@ -929,6 +1109,91 @@
     }
     .synclog-err  { color: #FF3B30; }
     .synclog-warn { color: #FF9500; }
+    .synclog-drift-banner {
+      margin-top: 14px;
+      padding: 12px 14px;
+      border-radius: 8px;
+      background: rgba(255, 149, 0, 0.10);
+      border: 1px solid rgba(255, 149, 0, 0.35);
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+    }
+    .synclog-drift-icon { font-size: 15px; line-height: 1.5; flex-shrink: 0; }
+    .synclog-drift-body { font-size: 12.5px; line-height: 1.55; color: var(--text); }
+    .synclog-drift-body strong {
+      display: block;
+      margin-bottom: 3px;
+      color: #FF9500;
+    }
+    /* Deleted-notes phase card — notes the exporter flagged as gone from Apple Notes */
+    .synclog-deleted-intro {
+      font-size: 12.5px;
+      color: var(--tx-secondary);
+      line-height: 1.5;
+      margin-bottom: 10px;
+    }
+    /* Deleted-notes table: 4-col grid — title · path · (spacer) · action button */
+    .synclog-deleted-table .synclog-file-hd,
+    .synclog-deleted-table .synclog-file-row {
+      grid-template-columns: minmax(0,1.2fr) minmax(0,1.8fr) 70px;
+    }
+    .synclog-deleted-table .synclog-file-row span:last-child {
+      text-align: right;
+      color: inherit;     /* override grey — button lives here */
+    }
+    .synclog-deleted-row-done {
+      opacity: 0.4;
+    }
+    .synclog-del-btn {
+      font-size: 11px;
+      font-family: inherit;
+      padding: 2px 8px;
+      border-radius: 5px;
+      border: 1px solid rgba(255, 59, 48, 0.4);
+      background: rgba(255, 59, 48, 0.07);
+      color: #FF3B30;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.12s, opacity 0.12s;
+    }
+    .synclog-del-btn:hover:not(:disabled) { background: rgba(255, 59, 48, 0.16); }
+    .synclog-del-btn:disabled { opacity: 0.5; cursor: default; }
+    .synclog-deleted-footer {
+      margin-top: 10px;
+      display: flex;
+      justify-content: flex-end;
+    }
+    .synclog-del-all-btn {
+      font-size: 12px;
+      font-family: inherit;
+      padding: 5px 14px;
+      border-radius: 7px;
+      border: 1px solid rgba(255, 59, 48, 0.4);
+      background: rgba(255, 59, 48, 0.08);
+      color: #FF3B30;
+      cursor: pointer;
+      font-weight: 600;
+      transition: background 0.12s, opacity 0.12s;
+    }
+    .synclog-del-all-btn:hover:not(:disabled) { background: rgba(255, 59, 48, 0.18); }
+    .synclog-del-all-btn:disabled { opacity: 0.5; cursor: default; }
+    /* Force Full Re-export button — appears in the drift banner */
+    .synclog-force-btn {
+      font-size: 12px;
+      font-family: inherit;
+      font-weight: 600;
+      padding: 6px 14px;
+      border-radius: 7px;
+      border: 1px solid rgba(255, 149, 0, 0.45);
+      background: rgba(255, 149, 0, 0.12);
+      color: #FF9500;
+      cursor: pointer;
+      transition: background 0.12s, opacity 0.12s;
+    }
+    .synclog-force-btn:hover:not(:disabled) { background: rgba(255, 149, 0, 0.22); }
+    .synclog-force-btn:disabled { opacity: 0.5; cursor: default; }
+    /* (Sidebar Force Full Re-export is now an equal-weight .sync-action-btn.force button) */
     .synclog-cleanup-summary { margin-bottom: 8px; }
     .synclog-file-table {
       border: 1px solid var(--divider);
@@ -1094,19 +1359,25 @@
     .synclog-close-disabled { pointer-events: none; opacity: 0.3; }
     .synclog-btn {
       background: none;
-      border: 1px solid var(--divider);
+      border: 1px solid var(--border);
       border-radius: 6px;
-      color: var(--tx-tertiary);
+      color: var(--tx-secondary);
       cursor: pointer;
-      font-size: 11px;
-      padding: 3px 8px;
-      margin-right: 4px;
-      transition: border-color var(--trans), color var(--trans);
+      font-size: 12px;
+      font-family: inherit;
+      padding: 3px 8px 3px 6px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: border-color var(--trans), color var(--trans), background var(--trans);
       vertical-align: middle;
+      flex-shrink: 0;
     }
+    .synclog-btn svg { width: 13px; height: 13px; flex-shrink: 0; }
     .synclog-btn:hover {
       border-color: var(--accent);
       color: var(--tx-primary);
+      background: var(--bg-hover);
     }
     .sync-footer.syncing .synclog-btn { display: none; }
 
@@ -1187,8 +1458,19 @@
     <div class="sidebar-top">
       <span class="sidebar-title">Notes</span>
       <div style="display:flex;align-items:center;gap:6px;">
-        <button class="info-btn" id="infoBtn" title="About">i</button>
-        <button class="settings-btn" id="settingsBtn" title="Settings">⚙️</button>
+        <button class="icon-btn" id="infoBtn" title="About" aria-label="About">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="9"/>
+            <line x1="12" y1="11" x2="12" y2="16.5"/>
+            <circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/>
+          </svg>
+        </button>
+        <button class="icon-btn" id="settingsBtn" title="Settings" aria-label="Settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </button>
         <div class="toggle-wrap" id="themeToggleWrap" title="Toggle dark mode">
           <span class="toggle-emoji" id="themeEmoji">☀️</span>
           <div class="toggle-track" id="themeTrack">
@@ -1203,12 +1485,38 @@
     </div>
 
     <div class="sync-footer">
-      <div class="sync-info">
+      <div class="sync-info-row">
         <span class="sync-status" id="syncStatus">—</span>
-        <div class="sync-bar" id="syncBar"><div class="sync-bar-fill" id="syncBarFill"></div></div>
+        <button class="synclog-btn" id="syncLogBtn" title="View last sync report" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="8" y1="13" x2="16" y2="13"/>
+            <line x1="8" y1="17" x2="16" y2="17"/>
+          </svg>
+          <span>Log</span>
+        </button>
       </div>
-      <button class="synclog-btn" id="syncLogBtn" title="View last sync report" hidden>Log</button>
-      <button class="sync-btn" id="syncBtn" title="Sync notes now">↻ Sync</button>
+      <div class="sync-bar" id="syncBar"><div class="sync-bar-fill" id="syncBarFill"></div></div>
+      <div class="sync-actions">
+        <button class="sync-action-btn primary" id="syncBtn" title="Sync changes from Apple Notes">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 12a9 9 0 1 1-3.6-7.2"/>
+            <polyline points="21 4 21 9 16 9"/>
+          </svg>
+          <span class="sync-action-label">Sync</span>
+        </button>
+        <button class="sync-action-btn force" id="syncForceLink"
+                title="Wipes the watermark and re-exports every note from Apple Notes. Use when notes have moved to Recently Deleted, or after many changes, to bring the export folder fully back in sync. Takes several minutes.">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3 12a9 9 0 0 1 14.7-7L21 8"/>
+            <polyline points="21 3 21 8 16 8"/>
+            <path d="M21 12a9 9 0 0 1-14.7 7L3 16"/>
+            <polyline points="3 21 3 16 8 16"/>
+          </svg>
+          <span class="sync-action-label">Full Re-export</span>
+        </button>
+      </div>
     </div>
   </aside>
 
@@ -1270,46 +1578,66 @@
     <button class="about-close" id="aboutClose" title="Close">✕</button>
 
     <div class="about-title" id="aboutTitle">Apple Notes Viewer</div>
-    <div class="about-version" id="aboutVersion">v2.5.0 — Local web viewer for Apple Notes exports</div>
+    <div class="about-version" id="aboutVersion">v2.6.0 — Local web viewer for Apple Notes exports</div>
 
     <p class="about-desc">
       A zero-dependency local web app for browsing and searching your Apple Notes.
-      Export your notes once with <strong>apple-notes-exporter</strong>, point the app
-      at the folder, and get a fast three-column interface with full-text search, tag
-      filtering, PDF previews, and light/dark mode — all running entirely on your Mac
-      with no cloud, no accounts, and no internet required.
+      Export your notes once, point the app at the folder, and get a fast three-column
+      interface with full-text search, tag filtering, PDF previews, and light/dark mode —
+      all running entirely on your Mac with no cloud, no accounts, and no internet required.
     </p>
 
     <div class="about-section">How to use</div>
     <p class="about-desc" style="margin-bottom:0">
-      1. Install <em>apple-notes-exporter</em> and run an initial export — pay careful attention to the export format (<code style="font-size:12px;background:var(--bg-search);padding:1px 5px;border-radius:4px;">--format html</code>) and output path options.<br>
+      1. Install <em>apple-notes-exporter</em> (see credit below) and run an initial export with <code style="font-size:12px;background:var(--bg-search);padding:1px 5px;border-radius:4px;">--format html</code>.<br>
       2. Launch via <strong>Launch Notes.command</strong> or <code style="font-size:12px;background:var(--bg-search);padding:1px 5px;border-radius:4px;">python3 server.py</code> in Terminal.<br>
-      3. On first run, use Settings (⚙️) to select your export folder.<br>
-      4. Press <strong>↻ Sync</strong> anytime to pull in new and changed notes.
+      3. On first run, click the gear icon (Settings) in the sidebar header to select your export folder.<br>
+      4. Press <strong>Sync</strong> in the sidebar footer to pull in new and changed notes. Use <strong>Full Re-export</strong> when notes have moved to Recently Deleted or after major changes — it wipes the watermark and re-exports every note (takes longer).
     </p>
-    <p class="about-desc" style="margin-top:10px;margin-bottom:0">
+    <p class="about-desc muted" style="margin-top:12px;margin-bottom:0">
       Full setup and operational details are in <code style="font-size:12px;background:var(--bg-search);padding:1px 5px;border-radius:4px;">README.md</code> in the project folder.
     </p>
 
     <hr class="about-divider">
 
-    <div class="about-section">Built by</div>
+    <div class="about-section">Built by Anthony Clarke</div>
     <div class="about-links">
       <a href="https://github.com/anthonyjclarke/apple-notes-viewer" target="_blank" rel="noopener">
-        ⌥ github.com/anthonyjclarke/apple-notes-viewer
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.11.79-.25.79-.55v-2.1c-3.2.7-3.88-1.36-3.88-1.36-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.7.08-.7 1.17.08 1.78 1.2 1.78 1.2 1.04 1.78 2.72 1.27 3.38.97.1-.75.41-1.27.74-1.56-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.19 1.18a11.07 11.07 0 0 1 5.81 0c2.22-1.5 3.19-1.18 3.19-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.69 5.39-5.25 5.68.42.36.8 1.08.8 2.18v3.23c0 .3.21.66.79.55A11.5 11.5 0 0 0 12 .5z"/>
+        </svg>
+        github.com/anthonyjclarke/apple-notes-viewer
       </a>
       <a href="https://bsky.app/profile/anthonyjclarke.bsky.social" target="_blank" rel="noopener">
-        ◆ @anthonyjclarke.bsky.social
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M6.34 4.55c2.66 2 5.51 6.05 6.56 8.22 1.05-2.17 3.9-6.22 6.56-8.22 1.92-1.45 5.04-2.57 5.04 1 0 .71-.41 5.97-.65 6.83-.83 2.97-3.85 3.73-6.54 3.27 4.7.8 5.9 3.45 3.32 6.1-4.9 5.04-7.05-1.27-7.6-2.88-.1-.29-.15-.43-.15-.31 0-.12-.05.02-.15.31-.55 1.61-2.7 7.92-7.6 2.88-2.58-2.65-1.38-5.3 3.32-6.1-2.69.46-5.71-.3-6.54-3.27-.24-.86-.65-6.12-.65-6.83 0-3.57 3.12-2.45 5.04-1z"/>
+        </svg>
+        @anthonyjclarke.bsky.social
       </a>
     </div>
 
     <hr class="about-divider">
 
-    <div class="about-credit">
-      Notes export powered by
-      <a href="https://github.com/kzaremski/apple-notes-exporter" target="_blank" rel="noopener">apple-notes-exporter</a>
-      by <a href="https://github.com/kzaremski" target="_blank" rel="noopener">Konstantin Zaremski</a>.
-      Many thanks for building and maintaining such a capable utility.
+    <!-- Featured credit — apple-notes-exporter does all the real work
+         of reading the Apple Notes SQLite DB. Prominent acknowledgment. -->
+    <div class="about-credit-card">
+      <div class="about-credit-eyebrow">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+        </svg>
+        Made possible by
+      </div>
+      <div class="about-credit-headline">
+        <a href="https://github.com/kzaremski/apple-notes-exporter" target="_blank" rel="noopener">apple-notes-exporter</a>
+      </div>
+      <div class="about-credit-author">
+        by <a href="https://github.com/kzaremski" target="_blank" rel="noopener">Konstantin Zaremski</a>
+      </div>
+      <p class="about-credit-thanks">
+        This app is just a viewer — Konstantin's tool does all the real work:
+        reading the Apple Notes SQLite database and producing the HTML files this app
+        renders. Sincere thanks for building and maintaining such a capable open-source utility.
+      </p>
     </div>
   </div>
 </div>
@@ -1607,13 +1935,18 @@ function renderList() {
       out += `<div class="group-hdr">${esc(grp)}</div>`;
       lastGroup = grp;
     }
-    const active = note.file === selectedFile ? " active" : "";
+    const active      = note.file === selectedFile ? " active" : "";
+    const delClass    = note.recently_deleted ? " is-deleted-note" : "";
+    const delPill     = note.recently_deleted
+      ? `<div class="note-deleted-pill">🗑 Recently Deleted</div>`
+      : "";
     out += `
-      <div class="note-item${active}" data-file="${esc(note.file)}">
+      <div class="note-item${active}${delClass}" data-file="${esc(note.file)}">
         <div class="note-row1">
           <div class="note-title">${highlight(note.title, q)}</div>
           <div class="note-date-badge">${esc(fmtShort(note.date))}</div>
         </div>
+        ${delPill}
         <div class="note-snippet">${highlight(note.snippet, q)}</div>
       </div>`;
   }
@@ -1626,6 +1959,47 @@ function renderList() {
   // Scroll selected item into view
   const active = listEl.querySelector(".note-item.active");
   if (active) active.scrollIntoView({ block: "nearest" });
+}
+
+/* ── Delete a note from the export folder ───────────────────────────── */
+async function deleteNote(file) {
+  try {
+    const r = await fetch("/api/note/delete", {
+      method:  "POST",
+      headers: {"Content-Type": "application/json"},
+      body:    JSON.stringify({file}),
+    });
+    const d = await r.json();
+    if (!d.ok) {
+      alert("Could not remove note:\n" + (d.error || "Unknown error"));
+      return;
+    }
+
+    // Remove from local data immediately — no re-index needed
+    const idx  = shownNotes.findIndex(n => n.file === file);
+    allNotes   = allNotes.filter(n => n.file !== file);
+    shownNotes = shownNotes.filter(n => n.file !== file);
+    selectedFile = null;
+    renderList();
+
+    // Select adjacent note, or show placeholder if list is now empty
+    const next = shownNotes[idx] || shownNotes[idx - 1];
+    if (next) {
+      openNote(next.file);
+    } else {
+      document.getElementById("contentPanel").innerHTML = `
+        <div class="placeholder">
+          <div class="placeholder-icon">📝</div>
+          <div class="placeholder-title">Select a note</div>
+          <div class="placeholder-sub">Choose from the list to read it here</div>
+        </div>`;
+    }
+
+    // Refresh sidebar folder and tag counts to reflect the removed note
+    loadFolders().then(loadTags);
+  } catch (e) {
+    alert("Could not remove note:\n" + e.message);
+  }
 }
 
 /* ── Open & render a note ───────────────────────────────────────────── */
@@ -1675,13 +2049,49 @@ function renderNote(rawHtml, file) {
   const parsed = new DOMParser().parseFromString(rawHtml, "text/html");
   parsed.body.querySelectorAll("img").forEach(img => img.removeAttribute("style"));
 
+  const recentlyDeletedBanner = note.recently_deleted ? `
+    <div class="recently-deleted-banner">
+      <div class="recently-deleted-banner-icon">🗑</div>
+      <div class="recently-deleted-banner-text">
+        <strong>Recently Deleted in Apple Notes</strong>
+        This note has been deleted from Apple Notes and will be permanently removed within
+        30 days. It can still be restored from Recently Deleted in Apple Notes.
+        Removing it here only deletes the export file — it does not affect Apple Notes.
+      </div>
+    </div>` : "";
+
   panel.innerHTML = `
     <div class="content-bar">
       <div class="content-date-lbl">${esc(fullDate)}</div>
+      <button class="note-delete-btn" title="Remove this note from the viewer">🗑</button>
+      <div class="content-bar-confirm" style="display:none">
+        <span class="note-delete-confirm-lbl">Remove from viewer only?</span>
+        <button class="note-delete-cancel-btn">Cancel</button>
+        <button class="note-delete-ok-btn">Remove</button>
+      </div>
     </div>
+    ${recentlyDeletedBanner}
     <div class="content-scroll">
       <div class="note-body" id="noteBody"></div>
     </div>`;
+
+  // Wire up delete / confirm / cancel
+  const _dateLbl  = panel.querySelector(".content-date-lbl");
+  const _delBtn   = panel.querySelector(".note-delete-btn");
+  const _confirm  = panel.querySelector(".content-bar-confirm");
+  const _cancelB  = panel.querySelector(".note-delete-cancel-btn");
+  const _okBtn    = panel.querySelector(".note-delete-ok-btn");
+  _delBtn.addEventListener("click", () => {
+    _dateLbl.style.display = "none";
+    _delBtn.style.display  = "none";
+    _confirm.style.display = "";
+  });
+  _cancelB.addEventListener("click", () => {
+    _dateLbl.style.display = "";
+    _delBtn.style.display  = "";
+    _confirm.style.display = "none";
+  });
+  _okBtn.addEventListener("click", () => deleteNote(file));
 
   document.getElementById("noteBody").innerHTML = parsed.body.innerHTML;
 
@@ -2127,7 +2537,9 @@ document.getElementById("settingsBtn").addEventListener("click", () => {
   // ── Report rendering ─────────────────────────────────────────────
   // includeRawOutput: false when live log is already shown above the cards
   function renderSyncLog(log, includeRawOutput = true) {
-    const typeLabel   = log.type === "full" ? "Full export" : "Incremental sync";
+    const typeLabel = log.reset_sync
+      ? "⟲ Forced full re-export"
+      : (log.type === "full" ? "Full export" : "Incremental sync");
     const schemeLabel = log.scheme === "date_prefix"
       ? "Date-prefixed filenames (YYYY-MM-DD)" : "No date prefix";
     document.getElementById("syncLogMeta").textContent =
@@ -2198,6 +2610,261 @@ document.getElementById("settingsBtn").addEventListener("click", () => {
     const ri = log.reindex || {};
     addPhase("ok", "✓", "Re-index", fmtDur(ri.duration_s || 0),
       `${(ri.notes_indexed || 0).toLocaleString()} note${ri.notes_indexed !== 1 ? "s" : ""} indexed`);
+
+    // ── Deleted-notes card ────────────────────────────────────────────────
+    // The exporter emits "Deleted (no longer in Notes): <path>" in verbose mode for
+    // notes that were previously exported but have since been removed from Apple Notes.
+    // It updates the watermark but leaves the HTML file on disk. We parse these lines
+    // and surface them here so the user can remove the stale files with one click.
+    const deletedNotes = (log.export || {}).deleted_notes || [];
+    if (deletedNotes.length > 0) {
+      const dn = deletedNotes.length;
+      let dnDetail = `
+        <div class="synclog-deleted-intro">
+          The exporter identified ${dn} note${dn !== 1 ? "s" : ""} that
+          ${dn !== 1 ? "have" : "has"} been deleted from Apple Notes.
+          The HTML file${dn !== 1 ? "s" : ""} still exist${dn !== 1 ? "" : "s"} in the
+          export folder — click <strong>Remove</strong> to delete each one from disk,
+          or <strong>Remove all</strong> to clean up in one step.
+        </div>
+        <div class="synclog-file-table synclog-deleted-table" id="synclogDeletedTable">
+          <div class="synclog-file-hd"><span>Note</span><span>Path</span><span></span></div>`;
+      deletedNotes.forEach((filePath, i) => {
+        const stem  = filePath.replace(/\.html$/i, "").split("/").pop() || filePath;
+        const title = stem.replace(/^\d{4}-\d{2}-\d{2} /, "");
+        dnDetail += `
+          <div class="synclog-file-row" id="dn-row-${i}" data-file="${esc(filePath)}">
+            <span title="${esc(title)}">${esc(title)}</span>
+            <span title="${esc(filePath)}" style="font-family:'SF Mono',Menlo,monospace;font-size:10.5px;">${esc(filePath)}</span>
+            <span><button class="synclog-del-btn" data-idx="${i}">Remove</button></span>
+          </div>`;
+      });
+      dnDetail += `</div>
+        <div class="synclog-deleted-footer">
+          <button class="synclog-del-all-btn" id="synclogDelAllBtn">Remove all ${dn}</button>
+        </div>`;
+
+      const dnCard = document.createElement("div");
+      dnCard.className = "synclog-phase";
+      dnCard.innerHTML = `
+        <div class="synclog-phase-head">
+          <span class="synclog-icon warn">⚠</span>
+          <span class="synclog-phase-label">Deleted from Apple Notes</span>
+          <span class="synclog-phase-dur">${dn} file${dn !== 1 ? "s" : ""}</span>
+        </div>
+        <div class="synclog-phase-detail">${dnDetail}</div>`;
+      body.appendChild(dnCard);
+
+      // Helper: remove one stale note file via the server, update the row UI.
+      // Returns true if the file was removed (or already gone).
+      async function removeStalNote(filePath, rowEl, btnEl) {
+        btnEl.disabled    = true;
+        btnEl.textContent = "Removing…";
+        try {
+          const r = await fetch("/api/note/delete", {
+            method:  "POST",
+            headers: {"Content-Type": "application/json"},
+            body:    JSON.stringify({file: filePath}),
+          });
+          const d = await r.json();
+          // "File not found on disk" means already gone — still counts as success.
+          if (d.ok || (d.error || "").toLowerCase().includes("not found")) {
+            rowEl.classList.add("synclog-deleted-row-done");
+            btnEl.textContent = "✓ Removed";
+            // Keep client note arrays in sync so the list doesn't show a ghost entry.
+            allNotes   = allNotes.filter(n => n.file !== filePath);
+            shownNotes = shownNotes.filter(n => n.file !== filePath);
+            if (selectedFile === filePath) {
+              selectedFile = null;
+              renderList();
+            }
+            return true;
+          } else {
+            btnEl.disabled    = false;
+            btnEl.textContent = "Remove";
+            btnEl.title       = d.error || "Unknown error";
+            return false;
+          }
+        } catch (e) {
+          btnEl.disabled    = false;
+          btnEl.textContent = "Remove";
+          btnEl.title       = e.message;
+          return false;
+        }
+      }
+
+      // Wire individual Remove buttons
+      dnCard.querySelectorAll(".synclog-del-btn").forEach((btn, i) => {
+        btn.addEventListener("click", async () => {
+          const rowEl   = btn.closest(".synclog-file-row");
+          const filePath = rowEl ? rowEl.dataset.file : deletedNotes[i];
+          if (!filePath) return;
+          const removed = await removeStalNote(filePath, rowEl, btn);
+          if (removed) loadFolders().then(loadTags);
+        });
+      });
+
+      // Wire "Remove all" button — iterates pending rows sequentially
+      const delAllBtn = dnCard.querySelector("#synclogDelAllBtn");
+      if (delAllBtn) {
+        delAllBtn.addEventListener("click", async () => {
+          delAllBtn.disabled    = true;
+          delAllBtn.textContent = "Removing…";
+          let anyRemoved = false;
+          const rows = dnCard.querySelectorAll(
+            ".synclog-file-row:not(.synclog-deleted-row-done)");
+          for (const row of rows) {
+            const btn      = row.querySelector(".synclog-del-btn");
+            const filePath = row.dataset.file;
+            if (btn && filePath) {
+              const removed = await removeStalNote(filePath, row, btn);
+              if (removed) anyRemoved = true;
+            }
+          }
+          delAllBtn.textContent = "All removed";
+          if (anyRemoved) loadFolders().then(loadTags);
+        });
+      }
+    }
+
+    // ── Drift warning banner ──────────────────────────────────────────────
+    // Count-based warning: shown when indexed HTML exceeds Apple Notes' reported
+    // total by the threshold, indicating accumulated old deletions on disk that
+    // weren't listed in the "Deleted (no longer in Notes):" output above.
+    const dr = log.drift || {};
+    if (dr.detected) {
+      const banner = document.createElement("div");
+      banner.className = "synclog-drift-banner";
+      const hasExactList = deletedNotes.length > 0;
+      banner.innerHTML = `
+        <div class="synclog-drift-icon">⚠</div>
+        <div class="synclog-drift-body">
+          <strong>${dr.stale_count.toLocaleString()} note${dr.stale_count !== 1 ? "s" : ""} may be stale</strong>
+          The export folder contains ${dr.indexed.toLocaleString()} notes but Apple Notes
+          reports ${dr.exporter_total.toLocaleString()}. Notes deleted from Apple Notes may
+          still appear in the viewer.${hasExactList
+            ? " Some stale files are listed above — remove them individually, or click <strong>Force Full Re-export</strong> to clean up in bulk."
+            : " A Force Full Re-export will detect every stale file precisely."}
+          <div style="margin-top:9px;">
+            <button class="synclog-force-btn" type="button">⟲ Force Full Re-export</button>
+          </div>
+        </div>`;
+      body.appendChild(banner);
+      banner.querySelector(".synclog-force-btn")
+            .addEventListener("click", confirmForceFullReExport);
+    }
+
+    // ── Stale-files card (reset_sync runs only) ───────────────────────────
+    // After --reset-sync, the watermark is fresh and contains only entries for
+    // notes currently in Apple Notes. Any HTML file on disk not in the new
+    // watermark is stale — either a permanently-deleted note's surviving HTML
+    // or the old copy of a note that moved to a different folder (e.g. into
+    // Recently Deleted). Each row has an individual Remove button and the
+    // card has a Remove-all bulk action.
+    const staleFiles = log.stale_files || [];
+    if (staleFiles.length > 0) {
+      const sf = staleFiles.length;
+      let sfDetail = `
+        <div class="synclog-deleted-intro">
+          The fresh watermark from <strong>--reset-sync</strong> identified
+          ${sf} HTML file${sf !== 1 ? "s" : ""} on disk that
+          ${sf !== 1 ? "are no longer linked" : "is no longer linked"} to any current note in Apple Notes.
+          These are either notes that have been permanently deleted, or old
+          copies left behind when a note moved between folders (e.g. into Recently Deleted).
+          Removing them brings the export folder fully in sync with Apple Notes.
+        </div>
+        <div class="synclog-file-table synclog-deleted-table" id="synclogStaleTable">
+          <div class="synclog-file-hd"><span>Note</span><span>Path</span><span></span></div>`;
+      staleFiles.forEach((item, i) => {
+        sfDetail += `
+          <div class="synclog-file-row" id="sf-row-${i}" data-file="${esc(item.path)}">
+            <span title="${esc(item.title)}">${esc(item.title)}</span>
+            <span title="${esc(item.path)}" style="font-family:'SF Mono',Menlo,monospace;font-size:10.5px;">${esc(item.path)}</span>
+            <span><button class="synclog-del-btn" data-idx="${i}">Remove</button></span>
+          </div>`;
+      });
+      sfDetail += `</div>
+        <div class="synclog-deleted-footer">
+          <button class="synclog-del-all-btn" id="synclogStaleAllBtn">Remove all ${sf}</button>
+        </div>`;
+
+      const sfCard = document.createElement("div");
+      sfCard.className = "synclog-phase";
+      sfCard.innerHTML = `
+        <div class="synclog-phase-head">
+          <span class="synclog-icon warn">⚠</span>
+          <span class="synclog-phase-label">Stale HTML files on disk</span>
+          <span class="synclog-phase-dur">${sf} file${sf !== 1 ? "s" : ""}</span>
+        </div>
+        <div class="synclog-phase-detail">${sfDetail}</div>`;
+      body.appendChild(sfCard);
+
+      // Same removal helper pattern as deletedNotes card above.
+      async function removeStaleFile(filePath, rowEl, btnEl) {
+        btnEl.disabled    = true;
+        btnEl.textContent = "Removing…";
+        try {
+          const r = await fetch("/api/note/delete", {
+            method:  "POST",
+            headers: {"Content-Type": "application/json"},
+            body:    JSON.stringify({file: filePath}),
+          });
+          const d = await r.json();
+          if (d.ok || (d.error || "").toLowerCase().includes("not found")) {
+            rowEl.classList.add("synclog-deleted-row-done");
+            btnEl.textContent = "✓ Removed";
+            allNotes   = allNotes.filter(n => n.file !== filePath);
+            shownNotes = shownNotes.filter(n => n.file !== filePath);
+            if (selectedFile === filePath) {
+              selectedFile = null;
+              renderList();
+            }
+            return true;
+          } else {
+            btnEl.disabled    = false;
+            btnEl.textContent = "Remove";
+            btnEl.title       = d.error || "Unknown error";
+            return false;
+          }
+        } catch (e) {
+          btnEl.disabled    = false;
+          btnEl.textContent = "Remove";
+          btnEl.title       = e.message;
+          return false;
+        }
+      }
+
+      sfCard.querySelectorAll(".synclog-del-btn").forEach((btn, i) => {
+        btn.addEventListener("click", async () => {
+          const rowEl    = btn.closest(".synclog-file-row");
+          const filePath = rowEl ? rowEl.dataset.file : staleFiles[i].path;
+          if (!filePath) return;
+          const removed = await removeStaleFile(filePath, rowEl, btn);
+          if (removed) loadFolders().then(loadTags);
+        });
+      });
+
+      const sfAllBtn = sfCard.querySelector("#synclogStaleAllBtn");
+      if (sfAllBtn) {
+        sfAllBtn.addEventListener("click", async () => {
+          sfAllBtn.disabled    = true;
+          sfAllBtn.textContent = "Removing…";
+          let anyRemoved = false;
+          const rows = sfCard.querySelectorAll(
+            ".synclog-file-row:not(.synclog-deleted-row-done)");
+          for (const row of rows) {
+            const btn      = row.querySelector(".synclog-del-btn");
+            const filePath = row.dataset.file;
+            if (btn && filePath) {
+              const removed = await removeStaleFile(filePath, row, btn);
+              if (removed) anyRemoved = true;
+            }
+          }
+          sfAllBtn.textContent = "All removed";
+          if (anyRemoved) loadFolders().then(loadTags);
+        });
+      }
+    }
 
     // Total
     document.getElementById("syncLogTotal").textContent =
@@ -2350,7 +3017,16 @@ function resetSyncBar() {
   syncBarFill.style.width = "0%";
 }
 
-document.getElementById("syncBtn").addEventListener("click", async () => {
+/* ── Sync runner ──────────────────────────────────────────────────────
+ * Called by the ↻ Sync button (resetSync=false) and the Force Full Re-export
+ * buttons in the drift banner / sidebar (resetSync=true). resetSync passes
+ * --reset-sync to the exporter, which deletes the watermark before exporting
+ * and forces every note to be re-exported to its current Apple Notes location.
+ * This is the only way to correctly re-place notes that moved to Recently
+ * Deleted since the last full export — the incremental exporter cannot detect
+ * Apple-Notes-internal folder moves.
+ * --------------------------------------------------------------------- */
+async function runSync(resetSync = false) {
   const btn    = document.getElementById("syncBtn");
   const sta    = document.getElementById("syncStatus");
   const footer = btn.closest(".sync-footer");
@@ -2358,25 +3034,40 @@ document.getElementById("syncBtn").addEventListener("click", async () => {
   const ui     = window._syncLog;
   const doneBtn = document.getElementById("syncLogDoneBtn");
 
+  // Cache the button's original label HTML (icon + span) so we can restore it
+  // after the sync. Using innerHTML preserves the inline SVG icon — setting
+  // textContent would replace the icon with raw "↻ Sync" text and break the layout.
+  const btnLabel  = btn.querySelector(".sync-action-label");
+  const origLabel = btnLabel ? btnLabel.textContent : "Sync";
+
+  // Close any open Sync Report (e.g. drift banner re-export was triggered from one)
+  document.getElementById("syncLogOverlay").classList.remove("open");
+
   // Open modal in live mode immediately — before POST even returns
-  ui.openLive("Starting sync…");
+  ui.openLive(resetSync
+    ? "Starting forced full re-export — this will take longer than a normal sync…"
+    : "Starting sync…");
 
   // Minimal footer indicator while modal is the primary UI
   btn.disabled = true;
-  btn.textContent = "↻ …";
-  sta.textContent = "Syncing…";
+  if (btnLabel) btnLabel.textContent = resetSync ? "Re-exporting…" : "Syncing…";
+  sta.textContent = resetSync ? "Full re-export…" : "Syncing…";
   footer.classList.add("syncing");
   setSyncBar(null);
 
   const resetFooter = () => {
     footer.classList.remove("syncing");
     resetSyncBar();
-    btn.disabled    = false;
-    btn.textContent = "↻ Sync";
+    btn.disabled = false;
+    if (btnLabel) btnLabel.textContent = origLabel;
   };
 
   try {
-    const r = await fetch("/api/sync", { method: "POST" });
+    const r = await fetch("/api/sync", {
+      method:  "POST",
+      headers: {"Content-Type": "application/json"},
+      body:    JSON.stringify({reset_sync: resetSync}),
+    });
     const d = await r.json();
 
     if (d.status === "error") {
@@ -2467,7 +3158,31 @@ document.getElementById("syncBtn").addEventListener("click", async () => {
       document.getElementById("syncLogOverlay").classList.remove("open");
     };
   }
-});
+}
+
+document.getElementById("syncBtn").addEventListener("click", () => runSync(false));
+document.getElementById("syncForceLink").addEventListener("click", () => confirmForceFullReExport());
+
+/* ── Force Full Re-export ─────────────────────────────────────────────
+ * Confirms with the user before kicking off `notes-export ... --reset-sync`.
+ * This is the user-visible escape hatch for the incremental exporter's main
+ * limitation: it cannot detect when notes move between folders inside Apple
+ * Notes (most notably into Recently Deleted), so over time the location of
+ * notes in the export folder drifts away from the live Apple Notes state.
+ * --------------------------------------------------------------------- */
+function confirmForceFullReExport() {
+  const ok = window.confirm(
+    "Force Full Re-export\n\n" +
+    "This will:\n" +
+    "  • Delete the export folder's watermark\n" +
+    "  • Re-export every note from Apple Notes (can take several minutes)\n" +
+    "  • Correctly place notes that have moved to Recently Deleted\n" +
+    "  • Identify stale HTML files that no longer match Apple Notes\n\n" +
+    "Notes are not touched in Apple Notes — Apple Notes is the source of truth.\n\n" +
+    "Continue?"
+  );
+  if (ok) runSync(true);
+}
 
 /* ── Startup index wait ─────────────────────────────────────────────── */
 async function waitForStartupIndex() {

@@ -22,7 +22,12 @@ PORT        = 8765
 APP_VERSION = "2.6.0"
 
 _CONFIG_FILE  = BASE_DIR / "config.json"
-_SKIP_FOLDERS = {"Recently Deleted"}   # Apple Notes folders excluded from index
+_SKIP_FOLDERS = set()   # Apple Notes folders excluded entirely from the index
+
+# Folders that are indexed and shown everywhere, but flagged so the UI can
+# display them with a visual warning. Notes here are pending permanent deletion
+# in Apple Notes (30-day window) — they can still be restored from Apple Notes.
+_RECENTLY_DELETED_FOLDERS = {"recently deleted", "trash", "deleted items"}
 
 _NOTES_EXPORT_CANDIDATES = [
     "/usr/local/bin/notes-export",
@@ -161,8 +166,9 @@ def build_index(notes_root: Path) -> list:
 
     notes = []
     for i, html_file in enumerate(html_files):
-        parts  = html_file.relative_to(notes_root).parts
-        folder = "/".join(parts[:-1])   # e.g. "iCloud/Notes"
+        parts            = html_file.relative_to(notes_root).parts
+        folder           = "/".join(parts[:-1])   # e.g. "iCloud/Notes"
+        recently_deleted = parts[1].lower() in _RECENTLY_DELETED_FOLDERS
 
         try:
             raw = html_file.read_text(encoding="utf-8", errors="ignore")
@@ -200,15 +206,16 @@ def build_index(notes_root: Path) -> list:
         all_tags  = stem_tags | body_tags
 
         notes.append({
-            "file":       "/".join(parts),   # e.g. "iCloud/Notes/2026-04-15 My Note.html"
-            "folder":     folder,
-            "title":      title,
-            "date":       date.strftime("%Y-%m-%d"),
-            "snippet":    snippet,
-            "_search":    (title + " " + body).lower(),
-            "_path":      str(html_file),
-            "_tags":      all_tags,
-            "_stem_tags": stem_tags,          # filename-sourced tags (native Apple Notes tags)
+            "file":             "/".join(parts),   # e.g. "iCloud/Notes/2026-04-15 My Note.html"
+            "folder":           folder,
+            "title":            title,
+            "date":             date.strftime("%Y-%m-%d"),
+            "snippet":          snippet,
+            "recently_deleted": recently_deleted,  # True → note is pending deletion in Apple Notes
+            "_search":          (title + " " + body).lower(),
+            "_path":            str(html_file),
+            "_tags":            all_tags,
+            "_stem_tags":       stem_tags,          # filename-sourced tags (native Apple Notes tags)
         })
 
         # Update progress every 25 files to limit lock contention
@@ -303,6 +310,21 @@ def _count_notes_for_progress(bin_path: str) -> int:
 _DATE_PREFIX_STRIP    = re.compile(r'^\d{4}-\d{2}-\d{2} ')
 _HREF_SRC_RE          = re.compile(r'''(?:href|src)\s*=\s*["']([^"']+)["']''', re.IGNORECASE)
 _PROGRESS_COUNTER_RE  = re.compile(r'^\[\d+/\d+\]$')   # exporter progress lines e.g. [3/7]
+_INCREMENTAL_TOTAL_RE = re.compile(r'Incremental sync:\s+\d+\s+new/changed\s+of\s+(\d+)\s+total', re.IGNORECASE)
+# Emitted by apple-notes-exporter --verbose for notes whose watermark entry has been
+# removed from Apple Notes since the last export. Format:
+#   Deleted (no longer in Notes): iCloud/Notes/VBC Training.html
+# The captured group is the relative path from notes_root — directly usable with
+# /api/note/delete. The exporter updates its watermark but does NOT remove the HTML
+# file from disk, so these files remain as stale orphans until explicitly removed.
+_DELETED_NOTE_RE = re.compile(r'Deleted \(no longer in Notes\):\s+(.+)', re.IGNORECASE)
+
+# Stale-note drift detection thresholds.
+# A warning is shown in the Sync Report when the number of indexed HTML files
+# exceeds the exporter's reported Apple Notes total by at least this much.
+# This indicates notes deleted in Apple Notes still exist on disk as orphaned HTML.
+_DRIFT_THRESHOLD_ABS = 10     # minimum absolute stale-note count before warning fires
+_DRIFT_THRESHOLD_PCT = 0.02   # minimum percentage drift (2%) before warning fires
 
 # Image file extensions the exporter ALWAYS stores in (Attachments) as raw copies
 # of inline base64 content — the HTML uses data: URIs, never path hrefs, so these
@@ -380,7 +402,7 @@ def _referenced_attachments(html_path: Path, att_dir: Path) -> "set[str] | None"
     return referenced
 
 
-def _prune_orphan_attachments(notes_root: Path) -> dict:
+def _prune_orphan_attachments(notes_root: Path, pre_sync_count: int = 0) -> dict:
     """Delete attachment files left behind when a note's attachments change.
 
     notes-export is additive: editing a note to swap or remove an attachment
@@ -426,19 +448,28 @@ def _prune_orphan_attachments(notes_root: Path) -> dict:
     except Exception:
         return result
 
-    # Consistency gate: if the export folder is grossly out of sync with its own
-    # manifest (interrupted export, external deletion, a cloud-sync tool like
-    # Syncthing/Dropbox/iCloud propagating deletes into the folder), do NOT run
-    # any cleanup. Require that most watermarked notes still exist on disk.
+    # Consistency gate: if the export folder is grossly out of sync with what was
+    # on disk before this sync (interrupted export, cloud-sync tool like Syncthing/
+    # Dropbox/iCloud propagating deletes into the folder), do NOT run any cleanup.
+    #
+    # Denominator: pre_sync_count (notes indexed immediately before this export ran).
+    # This is more accurate than len(entries) because the watermark is cumulative —
+    # it retains an entry for every note ever exported, including those deleted from
+    # Apple Notes years ago (exportedPath stays set; nothing is ever removed). Using
+    # len(entries) as the denominator grows over time and eventually fires falsely on
+    # healthy folders with accumulated deletions. pre_sync_count reflects only what
+    # was actually on disk before the sync, so the gate remains stable regardless of
+    # watermark history. Falls back to len(entries) on first-ever run (pre_sync_count=0).
     present = 0
     for entry in entries.values():
         ep = entry.get("exportedPath", "") or ""
         if ep.endswith(".html") and (notes_root / ep).is_file():
             present += 1
-    if entries and present < 0.75 * len(entries):
+    gate_denom = pre_sync_count if pre_sync_count > 0 else len(entries)
+    if gate_denom and present < 0.75 * gate_denom:
         reason = (
             f"Attachment cleanup skipped — export folder inconsistent "
-            f"({present} of {len(entries)} notes on disk). "
+            f"({present} of {gate_denom} notes on disk). "
             f"Folder may be in a cloud-sync share; see README.")
         result["skipped"]     = True
         result["skip_reason"] = reason
@@ -560,6 +591,60 @@ def _prune_orphan_attachments(notes_root: Path) -> dict:
 _DATE_PREFIX_RE = re.compile(r"(?:^|/)\d{4}-\d{2}-\d{2} ")
 
 
+def _detect_stale_html_files(notes_root: Path) -> list[dict]:
+    """List HTML files on disk that aren't present in the current watermark.
+
+    Only meaningful after a `--reset-sync` run: the watermark was wiped and
+    rebuilt from scratch, so it now contains entries only for notes that
+    currently exist in Apple Notes (including Recently Deleted). Any HTML file
+    on disk at depth 3 whose path is NOT in the watermark's exportedPath set
+    is stale — either:
+      (a) the note was permanently deleted from Apple Notes since the last
+          export and its HTML survived, OR
+      (b) the note moved to a different folder inside Apple Notes (e.g. into
+          Recently Deleted), the exporter wrote the new file at the new path,
+          and the old file at the old path was left behind.
+
+    Returned items each carry the relative path, the displayed title (with
+    date prefix stripped), and the size — used by the Sync Report UI to render
+    a removable list.
+
+    For non-reset incremental runs this MUST NOT be called — the watermark is
+    cumulative and will contain entries for deleted notes whose files do exist,
+    so on-disk files would be incorrectly flagged as stale.
+    """
+    wm_path = notes_root / "AppleNotesExportSyncWatermark.json"
+    if not wm_path.is_file():
+        return []
+    try:
+        wm      = json.loads(wm_path.read_text(encoding="utf-8"))
+        entries = wm.get("notes", {})
+        valid   = {(e.get("exportedPath") or "") for e in entries.values()
+                   if (e.get("exportedPath") or "").endswith(".html")}
+    except Exception:
+        return []
+
+    stale: list[dict] = []
+    try:
+        for f in notes_root.rglob("*.html"):
+            rel = f.relative_to(notes_root)
+            if len(rel.parts) != 3:
+                continue
+            rel_str = "/".join(rel.parts)
+            if rel_str in valid:
+                continue
+            try:
+                size = f.stat().st_size
+            except Exception:
+                size = 0
+            title = _DATE_PREFIX_STRIP.sub("", rel.stem)
+            stale.append({"path": rel_str, "title": title, "size": size})
+    except Exception:
+        pass
+    stale.sort(key=lambda s: s["path"].lower())
+    return stale
+
+
 def _detect_export_prefix_args(notes_root: Path) -> list[str]:
     """Return exporter args so Sync MATCHES the folder's existing filename scheme.
 
@@ -597,44 +682,63 @@ def _detect_export_prefix_args(notes_root: Path) -> list[str]:
         if prefixed >= 0.80 * len(paths) else []
 
 
-def _run_export_async(notes_root: Path, bin_path: str) -> None:
+def _run_export_async(notes_root: Path, bin_path: str,
+                      reset_sync: bool = False) -> None:
     """Run notes-export in a background thread, streaming progress into _state.
 
     Builds a structured sync_log dict throughout — covering export timing,
     all exporter stderr output, orphan cleanup detail, and re-index results —
     and stores it in _state["sync_log"] once the full sync + re-index completes.
     The log is available via GET /api/sync-log and powers the Sync Report modal.
+
+    reset_sync=True passes `--reset-sync` to the exporter, which deletes the
+    watermark before exporting. Every note is then treated as new and re-exported
+    to its current location in Apple Notes. This is the only reliable way to
+    correctly place notes that have moved to Recently Deleted since the last
+    full export — the incremental exporter cannot detect Apple-Notes-internal
+    folder moves because `modificationDate` does not change for them.
     """
     def run():
         t0 = time.monotonic()
         log: dict = {
-            "timestamp": datetime.now().isoformat(timespec="seconds"),
-            "type":    None,   # "full" | "incremental"
-            "scheme":  None,   # "date_prefix" | "no_prefix"
+            "timestamp":  datetime.now().isoformat(timespec="seconds"),
+            "type":       None,   # "full" | "incremental"
+            "reset_sync": reset_sync,   # True when user clicked Force Full Re-export
+            "scheme":     None,   # "date_prefix" | "no_prefix"
             "export": {
-                "duration_s":   0,
-                "stderr_lines": [],   # last ≤500 lines for the UI
-                "stderr_total": 0,    # all lines (may exceed capped list)
-                "exit_code":    None,
-                "error":        None,
+                "duration_s":    0,
+                "stderr_lines":  [],   # last ≤500 lines for the UI
+                "stderr_total":  0,    # all lines (may exceed capped list)
+                "exit_code":     None,
+                "error":         None,
+                "exporter_total": None,  # live note count from "N new/changed of M total"
+                "deleted_notes": [],    # paths from "Deleted (no longer in Notes):" lines
             },
             "cleanup": {
                 "files_removed": 0, "bytes_freed": 0, "dirs_removed": 0,
                 "items": [], "skipped": False, "skip_reason": None,
             },
             "reindex": {"notes_indexed": 0, "duration_s": 0},
+            "stale_files": [],   # populated after reset_sync runs only
             "total_duration_s": 0,
         }
 
         # ── Phase 1: full-export total (for % bar) ────────────────────
+        # reset_sync forces a full export regardless of whether the watermark exists,
+        # because --reset-sync deletes it before exporting.
         watermark = notes_root / "AppleNotesExportSyncWatermark.json"
-        is_full   = not watermark.exists()
+        is_full   = reset_sync or not watermark.exists()
         log["type"] = "full" if is_full else "incremental"
         if is_full:
             total = _count_notes_for_progress(bin_path)
             if total > 0:
                 with _lock:
                     _state["sync_progress"]["total"] = total
+
+        # Capture pre-sync note count for the consistency gate in
+        # _prune_orphan_attachments. Must be read before the export runs.
+        with _lock:
+            pre_sync_count = len(_state["notes"])
 
         # ── Phase 2: detect filename scheme ───────────────────────────
         prefix_args = _detect_export_prefix_args(notes_root)
@@ -653,24 +757,38 @@ def _run_export_async(notes_root: Path, bin_path: str) -> None:
         _mon  = ["Jan","Feb","Mar","Apr","May","Jun",
                  "Jul","Aug","Sep","Oct","Nov","Dec"][_now.month - 1]
         _ts   = f"{_now.day} {_mon} {_now.year} at {_h12}:{_now.minute:02d} {_ampm}"
-        _type_label   = "Full export" if is_full else "Incremental sync"
+        if reset_sync:
+            _type_label = "Forced full re-export (--reset-sync)"
+        elif is_full:
+            _type_label = "Full export (no watermark)"
+        else:
+            _type_label = "Incremental sync"
         _scheme_label = ("Date-prefixed filenames (YYYY-MM-DD)"
                          if prefix_args else "No date prefix")
         _emit_sync_line(f"── Sync started {_ts} ──")
         _emit_sync_line(f"Type: {_type_label}  ·  Scheme: {_scheme_label}")
+        if reset_sync:
+            _emit_sync_line(
+                "⟲ Watermark will be wiped — every note will be re-exported "
+                "to its current location in Apple Notes.")
         _emit_sync_line("── Exporter output ──")
         _emit_sync_line("  (✓ = note exported  ·  [N/M] = exporter progress counter: N of M notes done)")
 
         # ── Phase 3: run the exporter ─────────────────────────────────
+        # --incremental is always passed; --reset-sync deletes the watermark first
+        # when present, so the incremental run becomes a full re-export.
+        cmd = [bin_path, "export",
+               "--format", "html",
+               "--incremental"]
+        if reset_sync:
+            cmd.append("--reset-sync")
+        cmd.extend(["--verbose", *prefix_args,
+                    "--output", str(notes_root)])
+
         t_export = time.monotonic()
         try:
             proc = subprocess.Popen(
-                [bin_path, "export",
-                 "--format", "html",
-                 "--incremental",
-                 "--verbose",
-                 *prefix_args,
-                 "--output", str(notes_root)],
+                cmd,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,
                 text=True,
@@ -683,6 +801,20 @@ def _run_export_async(notes_root: Path, bin_path: str) -> None:
                     continue
                 done += 1
                 stderr_lines.append(line)
+                # Capture live Apple Notes total from incremental count line
+                # e.g. "Incremental sync: 9 new/changed of 1688 total"
+                _m = _INCREMENTAL_TOTAL_RE.search(line)
+                if _m:
+                    log["export"]["exporter_total"] = int(_m.group(1))
+
+                # Capture stale notes the exporter identified as deleted from Apple Notes.
+                # e.g. "Deleted (no longer in Notes): iCloud/Notes/VBC Training.html"
+                # The exporter updates its watermark for these but leaves the HTML on disk.
+                _d = _DELETED_NOTE_RE.search(line)
+                if _d:
+                    deleted_path = _d.group(1).strip()
+                    if deleted_path and deleted_path not in log["export"]["deleted_notes"]:
+                        log["export"]["deleted_notes"].append(deleted_path)
                 with _lock:
                     _state["sync_progress"]["done"]    = done
                     _state["sync_progress"]["current"] = line[:120]
@@ -748,11 +880,33 @@ def _run_export_async(notes_root: Path, bin_path: str) -> None:
                 _state["sync_log"] = log
             return
 
+        # ── Phase 3b: stale-file detection (reset_sync only) ──────────
+        # The fresh watermark from --reset-sync only contains entries for notes
+        # currently in Apple Notes. Any depth-3 HTML on disk that isn't in the
+        # watermark is an orphan: either a permanently-deleted note's surviving
+        # HTML, or the old copy of a note that moved between Apple Notes folders
+        # (e.g. into Recently Deleted) leaving the original behind.
+        if reset_sync:
+            try:
+                _emit_sync_line("── Stale file detection (post --reset-sync) ──")
+                stale = _detect_stale_html_files(notes_root)
+                log["stale_files"] = stale
+                if stale:
+                    _emit_sync_line(
+                        f"⚠ {len(stale)} stale HTML file"
+                        f"{'s' if len(stale) != 1 else ''} on disk "
+                        f"(not in fresh watermark) — listed in Sync Report.")
+                else:
+                    _emit_sync_line("✓ No stale HTML files — folder matches Apple Notes exactly.")
+            except Exception as e:
+                _emit_sync_line(f"! Stale-file scan failed: {e}")
+
         # ── Phase 4: orphan attachment cleanup ────────────────────────
         try:
             with _lock:
                 _state["sync_progress"]["current"] = "Cleaning up replaced attachments…"
-            cleanup = _prune_orphan_attachments(notes_root)
+            cleanup = _prune_orphan_attachments(notes_root,
+                                                pre_sync_count=pre_sync_count)
             log["cleanup"] = cleanup
             if cleanup.get("skipped"):
                 pass  # status message already set inside _prune_orphan_attachments
@@ -808,7 +962,25 @@ def _run_export_async(notes_root: Path, bin_path: str) -> None:
                     log["reindex"]["notes_indexed"] = note_count
                     log["reindex"]["duration_s"]    = round(time.monotonic() - t_reindex)
                     log["total_duration_s"]         = round(time.monotonic() - t0)
-                    log["log_complete"]             = True
+
+                    # ── Drift detection ───────────────────────────────────
+                    # If indexed count exceeds the exporter's live Apple Notes
+                    # total, deleted notes have left orphaned HTML on disk.
+                    # Only fires for incremental syncs where the count line was
+                    # captured — benign no-ops and full exports are excluded.
+                    exporter_total = log["export"].get("exporter_total")
+                    if exporter_total and exporter_total > 0:
+                        drift = note_count - exporter_total
+                        threshold = max(_DRIFT_THRESHOLD_ABS,
+                                        int(exporter_total * _DRIFT_THRESHOLD_PCT))
+                        log["drift"] = {
+                            "detected":       drift >= threshold,
+                            "stale_count":    max(drift, 0),
+                            "indexed":        note_count,
+                            "exporter_total": exporter_total,
+                        }
+
+                    log["log_complete"] = True
                     with _lock:
                         _state["sync_log"] = log
                     break
@@ -1370,6 +1542,16 @@ class Handler(BaseHTTPRequestHandler):
                 })
                 return
 
+            # Parse optional payload: {"reset_sync": true} → forced full re-export.
+            # No payload (or {}) → normal incremental sync.
+            reset_sync = False
+            try:
+                if payload:
+                    data       = json.loads(payload)
+                    reset_sync = bool(data.get("reset_sync", False))
+            except Exception:
+                pass   # invalid JSON → treat as plain sync, don't fail
+
             with _lock:
                 already = _state["sync_progress"].get("active", False)
             if already:
@@ -1400,8 +1582,110 @@ class Handler(BaseHTTPRequestHandler):
                     "current": "Starting…", "error": None,
                     "lines": [],   # accumulated stderr lines for the live modal view
                 }
-            _run_export_async(notes_root, bin_path)
-            self._json({"status": "syncing"})
+            _run_export_async(notes_root, bin_path, reset_sync=reset_sync)
+            self._json({"status": "syncing", "reset_sync": reset_sync})
+
+        # ── Delete a note HTML file from the export folder ─────────────
+        elif path == "/api/note/delete":
+            try:
+                data = json.loads(payload) if payload else {}
+                rel  = data.get("file", "").strip()
+                if not rel:
+                    self._json({"ok": False, "error": "Missing file parameter"}); return
+
+                with _lock:
+                    notes_root = _state.get("notes_root")
+                if not notes_root:
+                    self._json({"ok": False, "error": "Notes folder not configured"}); return
+
+                # ── Safety guards ────────────────────────────────────────
+                # 1. Resolve and confirm path stays inside notes_root
+                try:
+                    target   = (notes_root / rel).resolve()
+                    root_abs = notes_root.resolve()
+                except Exception:
+                    self._json({"ok": False, "error": "Invalid path"}); return
+
+                if not str(target).startswith(str(root_abs) + os.sep):
+                    self._json({"ok": False, "error": "Path outside notes folder"}); return
+
+                # 2. Must be a depth-3 note file (Account/Folder/Note.html)
+                rel_parts = Path(rel).parts
+                if len(rel_parts) != 3:
+                    self._json({"ok": False,
+                                "error": "Only note HTML files at depth 3 can be deleted"}); return
+
+                # 3. Must be an HTML file
+                if target.suffix.lower() != ".html":
+                    self._json({"ok": False, "error": "Only .html files can be deleted"}); return
+
+                # 4. Must exist
+                if not target.is_file():
+                    self._json({"ok": False, "error": "File not found on disk"}); return
+
+                # ── Delete HTML file ─────────────────────────────────────
+                target.unlink()
+
+                # ── Remove watermark entry so next incremental sync ───────
+                # re-exports this note if it still exists in Apple Notes.
+                #
+                # The incremental exporter decides what to skip by comparing
+                # each note's modificationDate in Apple Notes against the
+                # watermark. If the HTML is gone but the watermark entry
+                # remains, the exporter sees the note as "already exported,
+                # unchanged" and never rewrites the file — the note stays
+                # missing from the viewer permanently even though it still
+                # exists in Apple Notes.  Removing the entry makes the next
+                # sync treat the note as brand-new and re-export it.
+                #
+                # For notes that are genuinely gone from Apple Notes (e.g.
+                # removed via the Sync Report "Deleted from Apple Notes" card),
+                # removing the entry is harmless: the exporter will look up the
+                # note by UUID, find it absent, and simply skip it again.
+                wm_path = notes_root / "AppleNotesExportSyncWatermark.json"
+                try:
+                    if wm_path.is_file():
+                        wm      = json.loads(wm_path.read_text(encoding="utf-8"))
+                        entries = wm.get("notes", {})
+                        # exportedPath always uses forward slashes in the watermark
+                        rel_fwd    = rel.replace(os.sep, "/")
+                        stale_keys = [k for k, e in entries.items()
+                                      if (e.get("exportedPath") or "") == rel_fwd]
+                        if stale_keys:
+                            for k in stale_keys:
+                                del entries[k]
+                            wm_path.write_text(
+                                json.dumps(wm, ensure_ascii=False, indent=2),
+                                encoding="utf-8")
+                except Exception:
+                    pass   # watermark update is best-effort; don't fail the delete
+
+                # ── Delete matching (Attachments) folder if present ──────
+                att_dir           = target.parent / (target.stem + " (Attachments)")
+                attachments_count = 0
+                bytes_freed       = 0
+                if att_dir.is_dir():
+                    for f in att_dir.rglob("*"):
+                        if f.is_file():
+                            try:
+                                bytes_freed       += f.stat().st_size
+                                attachments_count += 1
+                            except Exception:
+                                pass
+                    shutil.rmtree(att_dir, ignore_errors=True)
+
+                # ── Remove from in-memory index ───────────────────────────
+                with _lock:
+                    _state["notes"] = [n for n in _state["notes"]
+                                       if n.get("file") != rel]
+
+                self._json({
+                    "ok":                 True,
+                    "attachments_count":  attachments_count,
+                    "bytes_freed":        bytes_freed,
+                })
+            except Exception as e:
+                self._json({"ok": False, "error": str(e)})
 
         else:
             self.send_error(405)
