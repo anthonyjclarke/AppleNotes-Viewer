@@ -19,7 +19,7 @@ from datetime import datetime
 BASE_DIR    = Path(__file__).parent
 APP_HTML    = BASE_DIR / "app.html"
 PORT        = 8765
-APP_VERSION = "2.6.0"
+APP_VERSION = "2.7.0"
 
 _CONFIG_FILE  = BASE_DIR / "config.json"
 _SKIP_FOLDERS = set()   # Apple Notes folders excluded entirely from the index
@@ -170,6 +170,17 @@ def build_index(notes_root: Path) -> list:
         folder           = "/".join(parts[:-1])   # e.g. "iCloud/Notes"
         recently_deleted = parts[1].lower() in _RECENTLY_DELETED_FOLDERS
 
+        # Stat once — used for file size and mtime fallback.
+        try:
+            st = html_file.stat()
+        except OSError:
+            continue
+        file_size = st.st_size
+
+        # Attachment folder: {stem} + " (Attachments)" in the same directory.
+        att_dir         = html_file.parent / (html_file.stem + " (Attachments)")
+        has_attachments = att_dir.is_dir()
+
         try:
             raw = html_file.read_text(encoding="utf-8", errors="ignore")
         except Exception:
@@ -193,7 +204,7 @@ def build_index(notes_root: Path) -> list:
             except ValueError:
                 pass
         if date is None:
-            date = datetime.fromtimestamp(html_file.stat().st_mtime)
+            date = datetime.fromtimestamp(st.st_mtime)
 
         body    = p.body_text()
         snippet = body[:280].strip()
@@ -211,7 +222,9 @@ def build_index(notes_root: Path) -> list:
             "title":            title,
             "date":             date.strftime("%Y-%m-%d"),
             "snippet":          snippet,
-            "recently_deleted": recently_deleted,  # True → note is pending deletion in Apple Notes
+            "size":             file_size,          # HTML file size in bytes (includes inline base64 images)
+            "has_attachments":  has_attachments,    # True → (Attachments)/ folder exists alongside HTML
+            "recently_deleted": recently_deleted,   # True → note is pending deletion in Apple Notes
             "_search":          (title + " " + body).lower(),
             "_path":            str(html_file),
             "_tags":            all_tags,
@@ -1035,14 +1048,23 @@ _SETTINGS_HTML = """\
     }
     .browse-open-btn:hover { border-color: #FFCC00; background: #fff; }
     .hint { font-size: 12px; color: #AEAEB2; margin-top: 7px; line-height: 1.5; }
+    .btn-row { display: flex; gap: 10px; margin-top: 24px; }
     .btn {
-      margin-top: 24px; width: 100%; padding: 12px;
+      flex: 1.5; padding: 12px;
       background: #FFCC00; border: none; border-radius: 9px;
       font-size: 15px; font-weight: 600; font-family: inherit;
       cursor: pointer; transition: opacity 0.15s;
     }
     .btn:hover { opacity: 0.85; }
     .btn:disabled { opacity: 0.5; cursor: default; }
+    .btn-back {
+      flex: 1; padding: 12px;
+      background: none; border: 1.5px solid rgba(0,0,0,0.12); border-radius: 9px;
+      font-size: 15px; font-weight: 600; font-family: inherit;
+      color: #636366; cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .btn-back:hover { border-color: #636366; color: #1C1C1E; }
     .msg { margin-top: 16px; font-size: 14px; text-align: center; min-height: 20px; }
     .msg.ok  { color: #34C759; }
     .msg.err { color: #FF3B30; }
@@ -1137,6 +1159,8 @@ _SETTINGS_HTML = """\
       .browse-entry:hover { background: rgba(255,255,255,0.06); }
       .browse-entry { color: #F2F2F7; }
       .browse-hd-x { color: #AEAEB2; }
+      .btn-back { border-color: rgba(255,255,255,0.12); color: #AEAEB2; }
+      .btn-back:hover { border-color: #AEAEB2; color: #F2F2F7; }
     }
   </style>
 </head>
@@ -1156,7 +1180,10 @@ _SETTINGS_HTML = """\
     </div>
     <p class="hint">PATH_TIP_TEXT</p>
 
-    <button class="btn" id="saveBtn">Save &amp; Index Notes</button>
+    <div class="btn-row">
+      BACK_BTN_HTML
+      <button class="btn" id="saveBtn">Save &amp; Index Notes</button>
+    </div>
     <div class="msg" id="msg"></div>
 
     <div class="progress-section" id="progressSection">
@@ -1352,10 +1379,16 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 placeholder = "/Users/you/Documents/AppleNotes"
                 tip = "Tip: drag the folder from Finder into Terminal and copy the path shown."
+            back_btn = (
+                '<button class="btn-back" onclick="window.location.href=\'/'
+                '\'">&#8592; Back</button>'
+                if current else ""
+            )
             html = (_SETTINGS_HTML
                     .replace("CURRENT_PATH", current)
                     .replace("PLACEHOLDER_PATH", placeholder)
-                    .replace("PATH_TIP_TEXT", tip))
+                    .replace("PATH_TIP_TEXT", tip)
+                    .replace("BACK_BTN_HTML", back_btn))
             body    = html.encode()
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")

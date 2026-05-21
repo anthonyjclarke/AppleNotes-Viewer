@@ -4,7 +4,7 @@
 
 Local single-page web app for browsing and searching Apple Notes exports produced by
 [`apple-notes-exporter`](https://github.com/kzaremski/apple-notes-exporter) CLI.
-v2.6.0 — Python 3 stdlib only, no framework, no build step.
+v2.7.0 — Python 3 stdlib only, no framework, no build step.
 
 ---
 
@@ -52,6 +52,16 @@ flagged `recently_deleted: True` in the note dict and client index. See below.
 folders). Path segments are encoded individually with `encodeURIComponent` so `#`
 becomes `%23`, not a URL fragment. The static handler uses `unquote()` to decode.
 
+**Note size and attachment fields** — `build_index()` calls `html_file.stat()` once per
+note (for both mtime fallback and size). `"size": st.st_size` (bytes, not `_`-prefixed →
+passes to client index) is the HTML file size — a faithful proxy for total note weight
+because inline base64 images are included. `"has_attachments": bool` is set by checking
+`html_file.parent / (html_file.stem + " (Attachments)")` — one `is_dir()` call. The
+client uses these for the size badge + sort-by-size and the sidebar attachment filter.
+`applyFiltersAndSort()` runs after every `loadNoteList()` fetch; it applies `attachFilter`
+and re-sorts by size desc when `sortMode === "size"`. Sort toggle and attachment filter
+are independent of folder/tag changes — never reset on navigation.
+
 **Date source** — `<meta name="modified" content="D Mon YYYY at H:MM am/pm">` parsed
 first; mtime is the fallback (survives rsync/OS migration that corrupts mtime). The
 `YYYY-MM-DD ` filename prefix is stripped (lines 174, 193) and is **never** a date
@@ -77,7 +87,11 @@ with a `.pdf` href fallback catches any card the marking pass missed.
 
 **Hashtag `<h1>` suppression** — the exporter splits "Title #tag" into multiple `<h1>`
 elements per token. `renderNote()` Step 4 hides subsequent `<h1>`s whose text is solely
-`#hashtag` tokens, preventing duplicate heading clutter in the rendered note.
+`#hashtag` tokens or whitespace, preventing duplicate heading clutter. Critical guard:
+an `<h1>` whose `textContent` is empty is only hidden if it contains no visual children
+(`img, video, svg, canvas, object, embed`). Notes saved from the iPhone share sheet
+produce `<h1><img src="data:image/jpeg;base64,…"></h1>` — the image `<h1>` has empty
+text but must not be suppressed.
 
 **Indeterminate scan phase** — `build_index()` calls `rglob("*.html")` before the total
 count is known. When `index_progress.total == 0`, the startup overlay and Settings

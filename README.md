@@ -2,7 +2,7 @@
 
 A local web app for browsing and searching your Apple Notes exports. Runs entirely on your machine — no cloud, no accounts, no runtime dependencies beyond Python 3.
 
-> **v2.6.0** — Built around [`apple-notes-exporter`](https://github.com/kzaremski/apple-notes-exporter). See [CHANGELOG.md](CHANGELOG.md) for what changed.
+> **v2.7.0** — Built around [`apple-notes-exporter`](https://github.com/kzaremski/apple-notes-exporter). See [CHANGELOG.md](CHANGELOG.md) for what changed.
 
 ---
 
@@ -16,7 +16,8 @@ A local web app for browsing and searching your Apple Notes exports. Runs entire
 - **Full-text search** — searches complete note body text, not just visible snippets; results highlighted as you type
 - **Folder navigation** — browse a single Apple Notes folder or search across all notes with one click
 - **Tag pills** — detects `#hashtags` from note text and filenames, matching Apple Notes exactly (including digit-first tags like `#10SmallSt` and short tags like `#AI`); displayed as clickable pill chips
-- **Last-edited sort order** — notes sorted by last-edited date, matching what you see on iPhone
+- **Sort by date or size** — notes sorted newest-edited first by default; a toggle in the list panel switches to largest-first, with size-bucket group headers; each note shows a compact file-size badge colour-coded by tier (amber ≥ 1 MB, red ≥ 5 MB)
+- **Attachment indicator and filter** — notes that have an `(Attachments)` folder show a paperclip icon in the title row; a **Has Attachments** filter pill in the sidebar narrows the list to those notes only, combining with any active folder, tag, or search filter
 - **Resizable columns** — drag either panel divider; preferences saved across sessions
 - **PDF inline viewer** — PDF attachment cards rendered directly in the note body as inline iframes; Safari and Chrome both display them natively
 - **About panel** — "i" button in the sidebar opens version info, a how-to-use guide, and attribution
@@ -188,7 +189,7 @@ To get updated notes on Windows:
 
 1. On your Mac, click **↻ Sync** in the app (or run `bash sync.sh` in Terminal).
 2. Copy the updated export folder to Windows using the same method as the initial transfer.
-3. The app re-indexes automatically on next launch, or click **Settings → Save & Index Notes** to re-index immediately without restarting.
+3. The app re-indexes automatically on next launch, or click the gear icon → **Save & Index Notes** to re-index immediately without restarting. (If you only want to check the configured path, click **← Back** to return without re-indexing.)
 
 ---
 
@@ -205,6 +206,8 @@ Understanding where the app gets its dates explains why the note ordering is wha
 **The "1 Jan 2001" cluster at the bottom is normal.** Some notes — typically very old, imported, or migrated ones — have no valid date in Apple Notes' database. Apple stores these with a 1 January 2001 timestamp (the Apple Cocoa epoch), so the exporter writes `<meta name="modified" content="1 Jan 2001…">` and the app sorts them together at the very bottom as one undated group. In large collections this can be a sizeable cluster. It reflects Apple Notes' own missing metadata — it is not a bug in the exporter or the viewer, and there is no date information to recover.
 
 **Time zones.** The exporter writes local wall-clock time with no zone offset; the app parses and displays it verbatim. Dates therefore reflect the time zone of the Mac that produced the export.
+
+**Note size.** The file-size badge shown in the note list is the size of the exported HTML file. Because the exporter encodes all embedded images as inline base64 in the HTML, this is a faithful proxy for the total weight of the note's content. Notes saved from the iPhone share sheet (e.g. "Saved Photo") can be several megabytes. Use the **↓ Size** sort toggle to find your largest notes quickly — useful for identifying notes to trim before a device sync.
 
 ---
 

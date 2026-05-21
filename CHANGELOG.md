@@ -1,6 +1,16 @@
 # Changelog
 
-## [2.6.0] Unreleased
+## [2.7.0] 22-05-2026
+
+### Fixed
+
+- **Image-only notes not rendering** — notes whose sole content is an image (e.g.
+  "Saved Photo" from the iPhone share sheet) are exported as
+  `<h1><img src="data:image/jpeg;base64,…"></h1>`. The Step 4 `<h1>` suppression in
+  `renderNote()` was hiding this element because `h1.textContent` is empty for image
+  nodes. Fixed: the empty-text check now guards with
+  `h1.querySelector("img, video, svg, canvas, object, embed")` before hiding — an
+  `<h1>` that contains visual elements is preserved even if it has no text.
 
 ### Added
 
@@ -76,6 +86,25 @@
   `POST /api/note/delete`. The card is complementary to the count-based drift banner:
   `deleted_notes` provides exact confirmed paths from this sync's output; the drift
   banner catches accumulated old deletions beyond that list.
+- **Note file size indicator** — HTML file size is now indexed (`"size": bytes`) and
+  shown in every note list item as a compact badge (e.g. `340 KB`, `1.2 MB`) in the
+  title row alongside the date. Colour-coded by tier: `< 100 KB` near-invisible, `100
+  KB–1 MB` secondary, `≥ 1 MB` amber `#FF9500`, `≥ 5 MB` red `#FF3B30`. HTML size
+  is the authoritative proxy for total note weight (inline base64 images are included).
+  A **↓ Date / ↓ Size** sort toggle in the list-panel meta row lets users sort by
+  largest-first; the date group headers switch to size-bucket headers (`5 MB and
+  above`, `1 – 5 MB`, `100 KB – 1 MB`, `Under 100 KB`) while size sort is active.
+- **Attachment indicator and sidebar filter** — `build_index()` checks for a
+  `{stem} (Attachments)/` directory alongside each HTML file and stores
+  `"has_attachments": bool`. Notes with attachments show a small paperclip SVG icon
+  in the title row. A **Has Attachments** filter pill in a new Filters section at the
+  bottom of the sidebar (above Tags) toggles client-side filtering; the note count
+  updates to `N notes with attachments` and the empty-state message is context-aware.
+  The filter persists across folder and tag changes and ANDs with any active search.
+- **Settings Back button** — when a notes folder is already configured, a `← Back`
+  button appears alongside the `Save & Index Notes` button in a flex row. Clicking
+  it returns to the viewer (`window.location.href = '/'`) without triggering
+  re-indexing. Hidden on first run (no path configured, nowhere to go back to).
 
 ### To Do
 

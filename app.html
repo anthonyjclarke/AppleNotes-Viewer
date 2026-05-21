@@ -388,13 +388,77 @@
     }
     .search-all-pill.active .search-all-dot { opacity: 1; }
 
+    /* List meta row — note count + sort toggle */
+    .list-meta-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 5px 10px 2px 13px;
+      flex-shrink: 0;
+    }
     .list-meta {
-      padding: 5px 13px 2px;
       font-size: 11px;
       color: var(--tx-tertiary);
       font-weight: 500;
-      flex-shrink: 0;
     }
+    .sort-toggle {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--tx-secondary);
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 2px 8px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: border-color var(--trans), color var(--trans), background var(--trans);
+      user-select: none;
+      white-space: nowrap;
+    }
+    .sort-toggle:hover { border-color: var(--accent); color: var(--tx-primary); }
+    .sort-toggle.active {
+      background: var(--bg-sel);
+      border-color: var(--accent);
+      color: var(--tx-primary);
+    }
+
+    /* Sidebar attachment filter pill */
+    .filter-grid {
+      padding: 4px 10px 6px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .filter-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 12px;
+      border-radius: 20px;
+      background: var(--bg-content);
+      border: 1px solid var(--border);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--tx-secondary);
+      cursor: pointer;
+      transition: background var(--trans), border-color var(--trans), color var(--trans);
+      user-select: none;
+      white-space: nowrap;
+      line-height: 1.3;
+    }
+    .filter-pill:hover {
+      background: var(--bg-hover);
+      border-color: var(--accent);
+      color: var(--tx-primary);
+    }
+    .filter-pill.active {
+      background: var(--bg-sel);
+      border-color: var(--accent);
+      color: var(--tx-primary);
+      font-weight: 600;
+    }
+    [data-theme="dark"] .filter-pill { background: var(--bg-list); }
+    [data-theme="dark"] .filter-pill:hover { background: var(--bg-hover); }
 
     .note-list {
       flex: 1;
@@ -486,6 +550,28 @@
       margin: 3px 0 2px;
       letter-spacing: 0.01em;
     }
+    /* Note size badge */
+    .note-size-badge {
+      font-size: 10.5px;
+      font-weight: 500;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .note-size-sm { color: var(--tx-tertiary); }
+    .note-size-md { color: var(--tx-secondary); }
+    .note-size-lg { color: #FF9500; }
+    .note-size-xl { color: #FF3B30; }
+
+    /* Attachment icon */
+    .note-attach-icon {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      color: var(--tx-tertiary);
+      margin-right: -1px;
+    }
+    .note-attach-icon svg { width: 11px; height: 11px; }
+
     /* Recently Deleted — content pane warning banner */
     .recently-deleted-banner {
       display: flex;
@@ -1537,7 +1623,10 @@
         </button>
       </div>
     </div>
-    <div class="list-meta" id="listMeta"></div>
+    <div class="list-meta-row">
+      <div class="list-meta" id="listMeta"></div>
+      <button class="sort-toggle" id="sortToggle" title="Sort by date or file size">↓ Date</button>
+    </div>
     <div class="note-list" id="noteList">
       <div class="loading-wrap"><div class="spinner"></div>Loading…</div>
     </div>
@@ -1578,7 +1667,7 @@
     <button class="about-close" id="aboutClose" title="Close">✕</button>
 
     <div class="about-title" id="aboutTitle">Apple Notes Viewer</div>
-    <div class="about-version" id="aboutVersion">v2.6.0 — Local web viewer for Apple Notes exports</div>
+    <div class="about-version" id="aboutVersion">v2.7.0 — Local web viewer for Apple Notes exports</div>
 
     <p class="about-desc">
       A zero-dependency local web app for browsing and searching your Apple Notes.
@@ -1695,6 +1784,8 @@ let searchTimer   = null;
 let searchQ       = "";
 let searchAll     = false;
 let currentTag    = null;   // active tag filter, e.g. "#GPS"
+let sortMode      = "date"; // "date" (newest first) | "size" (largest first)
+let attachFilter  = false;  // when true, show only notes with an (Attachments)/ folder
 
 /* ── Theme ──────────────────────────────────────────────────────────── */
 const html      = document.documentElement;
@@ -1745,6 +1836,38 @@ function fmtFull(dateStr) {
   return localDate(dateStr).toLocaleDateString("en-AU", {
     weekday: "long", day: "numeric", month: "long", year: "numeric"
   });
+}
+
+/* ── Size formatting ────────────────────────────────────────────────── */
+function fmtSize(b) {
+  if (!b) return "0 B";
+  if (b >= 1048576) return (b / 1048576).toFixed(1) + " MB";
+  if (b >= 1024)    return Math.round(b / 1024) + " KB";
+  return b + " B";
+}
+
+function sizeClass(b) {
+  if (b >= 5 * 1048576) return "note-size-xl";   // ≥ 5 MB — red
+  if (b >= 1048576)     return "note-size-lg";   // ≥ 1 MB — amber
+  if (b >= 102400)      return "note-size-md";   // ≥ 100 KB — secondary
+  return "note-size-sm";                          // < 100 KB — near-invisible
+}
+
+function sizeGroupLabel(b) {
+  if (b >= 5 * 1048576) return "5 MB and above";
+  if (b >= 1048576)     return "1 – 5 MB";
+  if (b >= 102400)      return "100 KB – 1 MB";
+  return "Under 100 KB";
+}
+
+/* ── Filter + sort ──────────────────────────────────────────────────── */
+function applyFiltersAndSort() {
+  let result = allNotes;
+  if (attachFilter) result = result.filter(n => n.has_attachments);
+  if (sortMode === "size") {
+    result = [...result].sort((a, b) => (b.size || 0) - (a.size || 0));
+  }
+  shownNotes = result;
 }
 
 function groupLabel(dateStr) {
@@ -1820,52 +1943,76 @@ async function loadFolders() {
 async function loadTags() {
   const resp = await fetch("/api/tags");
   const tags = await resp.json();
-  if (!tags.length) return;
 
   const container = document.getElementById("folderList");
 
-  const allActive = !currentTag ? " active" : "";
+  // ── Filters section — always rendered ────────────────────────────────
+  const attActive = attachFilter ? " active" : "";
   let html = `<div class="sidebar-divider"></div>
-    <div class="folder-section-label">Tags</div>
-    <div class="tag-grid" id="tagGrid">
-      <div class="tag-pill${allActive}" data-tag="">All Tags</div>`;
+    <div class="folder-section-label">Filters</div>
+    <div class="filter-grid">
+      <div class="filter-pill${attActive}" id="attachFilterPill">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+        Has Attachments
+      </div>
+    </div>`;
 
-  for (const { tag } of tags) {
-    const active = currentTag === tag ? " active" : "";
-    html += `<div class="tag-pill${active}" data-tag="${esc(tag)}">${esc(tag)}</div>`;
+  // ── Tags section — only when tags exist ──────────────────────────────
+  if (tags.length) {
+    const allActive = !currentTag ? " active" : "";
+    html += `<div class="sidebar-divider"></div>
+      <div class="folder-section-label">Tags</div>
+      <div class="tag-grid" id="tagGrid">
+        <div class="tag-pill${allActive}" data-tag="">All Tags</div>`;
+
+    for (const { tag } of tags) {
+      const active = currentTag === tag ? " active" : "";
+      html += `<div class="tag-pill${active}" data-tag="${esc(tag)}">${esc(tag)}</div>`;
+    }
+    html += `</div>`;
   }
-  html += `</div>`;
 
   container.insertAdjacentHTML("beforeend", html);
 
-  container.querySelectorAll(".tag-pill").forEach(pill => {
-    pill.addEventListener("click", () => {
-      const tag = pill.dataset.tag;
-      if (tag) {
-        currentTag = tag;
-        searchQ    = tag;
-        searchAll  = false;
-        document.getElementById("searchInput").value = tag;
-      } else {
-        // "All Tags" — clear tag filter, keep current folder
-        currentTag = null;
-        searchQ    = "";
-        searchAll  = false;
-        document.getElementById("searchInput").value = "";
-      }
-      document.querySelectorAll(".folder-item").forEach(e => e.classList.remove("active"));
-      document.querySelectorAll(".tag-pill").forEach(e => e.classList.remove("active"));
-      pill.classList.add("active");
-      // Restore folder highlight if "All Tags" was clicked
-      if (!tag) {
-        document.querySelectorAll(".folder-item").forEach(e =>
-          e.classList.toggle("active", e.dataset.folder === currentFolder)
-        );
-      }
-      updateSearchAllPill();
-      loadNoteList();
-    });
+  // ── Attachment filter pill click handler ─────────────────────────────
+  document.getElementById("attachFilterPill").addEventListener("click", () => {
+    attachFilter = !attachFilter;
+    document.getElementById("attachFilterPill").classList.toggle("active", attachFilter);
+    applyFiltersAndSort();
+    renderList();
   });
+
+  // ── Tag pill click handlers ──────────────────────────────────────────
+  if (tags.length) {
+    container.querySelectorAll(".tag-pill").forEach(pill => {
+      pill.addEventListener("click", () => {
+        const tag = pill.dataset.tag;
+        if (tag) {
+          currentTag = tag;
+          searchQ    = tag;
+          searchAll  = false;
+          document.getElementById("searchInput").value = tag;
+        } else {
+          // "All Tags" — clear tag filter, keep current folder
+          currentTag = null;
+          searchQ    = "";
+          searchAll  = false;
+          document.getElementById("searchInput").value = "";
+        }
+        document.querySelectorAll(".folder-item").forEach(e => e.classList.remove("active"));
+        document.querySelectorAll(".tag-pill").forEach(e => e.classList.remove("active"));
+        pill.classList.add("active");
+        // Restore folder highlight if "All Tags" was clicked
+        if (!tag) {
+          document.querySelectorAll(".folder-item").forEach(e =>
+            e.classList.toggle("active", e.dataset.folder === currentFolder)
+          );
+        }
+        updateSearchAllPill();
+        loadNoteList();
+      });
+    });
+  }
 }
 
 /* ── Search-all pill ────────────────────────────────────────────────── */
@@ -1885,6 +2032,16 @@ document.getElementById("searchAllPill").addEventListener("click", () => {
   loadNoteList();
 });
 
+/* ── Sort toggle ────────────────────────────────────────────────────── */
+document.getElementById("sortToggle").addEventListener("click", () => {
+  sortMode = sortMode === "date" ? "size" : "date";
+  const btn = document.getElementById("sortToggle");
+  btn.textContent = sortMode === "size" ? "↓ Size" : "↓ Date";
+  btn.classList.toggle("active", sortMode === "size");
+  applyFiltersAndSort();
+  renderList();
+});
+
 /* ── Load & render note list ────────────────────────────────────────── */
 async function loadNoteList() {
   document.getElementById("noteList").innerHTML =
@@ -1902,7 +2059,7 @@ async function loadNoteList() {
 
   const resp = await fetch(url);
   allNotes   = await resp.json();
-  shownNotes = allNotes;
+  applyFiltersAndSort();
   renderList();
 }
 
@@ -1912,38 +2069,61 @@ function renderList() {
   const q      = searchQ.length >= 2 ? searchQ : "";
 
   if (shownNotes.length === 0) {
+    const emptyMsg = attachFilter && !q
+      ? "No notes with attachments in this view"
+      : q ? `Nothing matched "${esc(q)}"` : "No notes here";
     listEl.innerHTML = `
       <div class="placeholder" style="height:auto;padding:60px 20px;">
         <div class="placeholder-icon">🔍</div>
         <div class="placeholder-title">No Results</div>
-        <div class="placeholder-sub">Nothing matched "${esc(q)}"</div>
+        <div class="placeholder-sub">${emptyMsg}</div>
       </div>`;
     metaEl.textContent = "No results";
     return;
   }
 
+  const countSuffix = (attachFilter && !q) ? " with attachments" : "";
   metaEl.textContent = q
-    ? `${shownNotes.length} result${shownNotes.length !== 1 ? "s" : ""}`
-    : `${shownNotes.length} note${shownNotes.length !== 1 ? "s" : ""}`;
+    ? `${shownNotes.length} result${shownNotes.length !== 1 ? "s" : ""}${countSuffix}`
+    : `${shownNotes.length} note${shownNotes.length !== 1 ? "s" : ""}${countSuffix}`;
 
   let out = "";
   let lastGroup = null;
 
+  const clipSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>`;
+
   for (const note of shownNotes) {
-    const grp = groupLabel(note.date);
-    if (grp !== lastGroup) {
-      out += `<div class="group-hdr">${esc(grp)}</div>`;
-      lastGroup = grp;
+    // Group header — date groups normally; size buckets when sorted by size
+    if (sortMode === "size") {
+      const grp = sizeGroupLabel(note.size || 0);
+      if (grp !== lastGroup) {
+        out += `<div class="group-hdr">${esc(grp)}</div>`;
+        lastGroup = grp;
+      }
+    } else {
+      const grp = groupLabel(note.date);
+      if (grp !== lastGroup) {
+        out += `<div class="group-hdr">${esc(grp)}</div>`;
+        lastGroup = grp;
+      }
     }
+
     const active      = note.file === selectedFile ? " active" : "";
     const delClass    = note.recently_deleted ? " is-deleted-note" : "";
     const delPill     = note.recently_deleted
       ? `<div class="note-deleted-pill">🗑 Recently Deleted</div>`
       : "";
+    const sz          = note.size || 0;
+    const sizeBadge   = `<div class="note-size-badge ${sizeClass(sz)}">${fmtSize(sz)}</div>`;
+    const attachIcon  = note.has_attachments
+      ? `<div class="note-attach-icon" title="Has attachments">${clipSvg}</div>`
+      : "";
     out += `
       <div class="note-item${active}${delClass}" data-file="${esc(note.file)}">
         <div class="note-row1">
+          ${attachIcon}
           <div class="note-title">${highlight(note.title, q)}</div>
+          ${sizeBadge}
           <div class="note-date-badge">${esc(fmtShort(note.date))}</div>
         </div>
         ${delPill}
@@ -2177,10 +2357,17 @@ function renderNote(rawHtml, file) {
   // producing <h1>Title </h1><h1>#tag</h1><h1> <br></h1>.  Keep the first
   // non-empty h1 (the note title); hide any subsequent h1 whose text is solely
   // #hashtag tokens or whitespace.
+  // IMPORTANT: a note whose content is purely an image produces <h1><img …></h1>
+  // which has empty textContent but must NOT be hidden — guard with querySelector.
   let _seenTitle = false;
   document.querySelectorAll("#noteBody h1").forEach(h1 => {
     const text = h1.textContent.replace(/\s+/g, " ").trim();
-    if (!text) { h1.style.display = "none"; return; }
+    if (!text) {
+      // Only suppress if it contains no visual child elements (images, video, SVG…).
+      if (!h1.querySelector("img, video, svg, canvas, object, embed"))
+        h1.style.display = "none";
+      return;
+    }
     if (!_seenTitle) { _seenTitle = true; return; }
     if (/^(#[A-Za-zÀ-ɏ]\w*\s*)+$/.test(text)) h1.style.display = "none";
   });
