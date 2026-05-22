@@ -2,7 +2,7 @@
 
 A local web app for browsing and searching your Apple Notes exports. Runs entirely on your machine — no cloud, no accounts, no runtime dependencies beyond Python 3.
 
-> **v2.5.0** — Built around [`apple-notes-exporter`](https://github.com/kzaremski/apple-notes-exporter). See [CHANGELOG.md](CHANGELOG.md) for what changed.
+> **v2.7.0** — Built around [`apple-notes-exporter`](https://github.com/kzaremski/apple-notes-exporter). See [CHANGELOG.md](CHANGELOG.md) for what changed.
 
 ---
 
@@ -16,7 +16,8 @@ A local web app for browsing and searching your Apple Notes exports. Runs entire
 - **Full-text search** — searches complete note body text, not just visible snippets; results highlighted as you type
 - **Folder navigation** — browse a single Apple Notes folder or search across all notes with one click
 - **Tag pills** — detects `#hashtags` from note text and filenames, matching Apple Notes exactly (including digit-first tags like `#10SmallSt` and short tags like `#AI`); displayed as clickable pill chips
-- **Last-edited sort order** — notes sorted by last-edited date, matching what you see on iPhone
+- **Sort by date or size** — notes sorted newest-edited first by default; a toggle in the list panel switches to largest-first, with size-bucket group headers; each note shows a compact file-size badge colour-coded by tier (amber ≥ 1 MB, red ≥ 5 MB)
+- **Attachment indicator and filter** — notes that have an `(Attachments)` folder show a paperclip icon in the title row; a **Has Attachments** filter pill in the sidebar narrows the list to those notes only, combining with any active folder, tag, or search filter
 - **Resizable columns** — drag either panel divider; preferences saved across sessions
 - **PDF inline viewer** — PDF attachment cards rendered directly in the note body as inline iframes; Safari and Chrome both display them natively
 - **About panel** — "i" button in the sidebar opens version info, a how-to-use guide, and attribution
@@ -188,7 +189,7 @@ To get updated notes on Windows:
 
 1. On your Mac, click **↻ Sync** in the app (or run `bash sync.sh` in Terminal).
 2. Copy the updated export folder to Windows using the same method as the initial transfer.
-3. The app re-indexes automatically on next launch, or click **Settings → Save & Index Notes** to re-index immediately without restarting.
+3. The app re-indexes automatically on next launch, or click the gear icon → **Save & Index Notes** to re-index immediately without restarting. (If you only want to check the configured path, click **← Back** to return without re-indexing.)
 
 ---
 
@@ -205,6 +206,108 @@ Understanding where the app gets its dates explains why the note ordering is wha
 **The "1 Jan 2001" cluster at the bottom is normal.** Some notes — typically very old, imported, or migrated ones — have no valid date in Apple Notes' database. Apple stores these with a 1 January 2001 timestamp (the Apple Cocoa epoch), so the exporter writes `<meta name="modified" content="1 Jan 2001…">` and the app sorts them together at the very bottom as one undated group. In large collections this can be a sizeable cluster. It reflects Apple Notes' own missing metadata — it is not a bug in the exporter or the viewer, and there is no date information to recover.
 
 **Time zones.** The exporter writes local wall-clock time with no zone offset; the app parses and displays it verbatim. Dates therefore reflect the time zone of the Mac that produced the export.
+
+**Note size.** The file-size badge shown in the note list is the size of the exported HTML file. Because the exporter encodes all embedded images as inline base64 in the HTML, this is a faithful proxy for the total weight of the note's content. Notes saved from the iPhone share sheet (e.g. "Saved Photo") can be several megabytes. Use the **↓ Size** sort toggle to find your largest notes quickly — useful for identifying notes to trim before a device sync.
+
+---
+
+## Deleting notes and managing stale exports
+
+Understanding how note deletion works in this app requires understanding three things first:
+
+1. **Apple Notes is the source of truth.** This app never modifies Apple Notes. Anything you delete here only affects the export folder.
+2. **The exporter is additive.** `apple-notes-exporter` writes new files and updates changed ones, but never deletes files on its own. Files only disappear if this app removes them.
+3. **The incremental exporter trusts the watermark.** `AppleNotesExportSyncWatermark.json` records, per note: UUID, `modificationDate`, and `exportedPath`. On the next sync, the exporter compares each note's live `modificationDate` against the watermark. If they match, the note is **skipped** — even if the note has moved to a different folder inside Apple Notes (most importantly, into Recently Deleted).
+
+Everything below follows from those three facts.
+
+### The four states a note can be in
+
+| State in Apple Notes | State on disk | What the viewer shows |
+|:--|:--|:--|
+| Exists in a normal folder | HTML in `iCloud/Notes/…` | Regular note |
+| Moved to Recently Deleted (within 30-day window) | HTML in `iCloud/Recently Deleted/…` | 🗑 Recently Deleted pill in the list, red warning banner in the content pane |
+| Permanently deleted (cleared from Recently Deleted) | HTML still in `iCloud/Notes/…` from a previous export | Regular note (stale — does not actually exist in Apple Notes) |
+| Removed via the viewer's 🗑 trash icon | HTML and `(Attachments)` folder deleted; watermark entry removed | Gone from the viewer |
+
+The third state — *permanently deleted in Apple Notes but still on disk* — is the source of "drift". The exporter cannot remove the file, so the app provides multiple ways to detect and clean it up.
+
+### Recently Deleted notes are visible and marked
+
+Notes you have moved to Recently Deleted in Apple Notes appear in the viewer — in the note list, in All Notes, and in search — but are visually distinguished from regular notes:
+
+- A red **🗑 Recently Deleted** pill badge appears below the note title in the list
+- The note title is shown in a muted colour
+- The Recently Deleted folder in the sidebar carries a 🗑️ icon
+- Opening the note shows a red warning banner at the top: *"This note has been deleted from Apple Notes and will be permanently removed within 30 days. It can still be restored from Recently Deleted in Apple Notes."*
+
+These notes can still be restored from Recently Deleted in Apple Notes before the 30-day window closes. Removing them in the viewer (via the 🗑 trash icon) only deletes the export file — Apple Notes is untouched.
+
+> **Important limitation:** the incremental exporter does **not** detect when a note moves between folders inside Apple Notes if its `modificationDate` hasn't changed. So a note that was already exported as `iCloud/Notes/Foo.html`, then moved to Recently Deleted in Apple Notes, may continue to show as a regular note in the viewer until a **Force Full Re-export** is run. This is the most common reason to use that option.
+
+### Detection signals the app provides
+
+After every sync, the app uses three signals to identify stale or misplaced notes:
+
+| Signal | When it fires | What it identifies | Precision |
+|:--|:--|:--|:--|
+| **Deleted from Apple Notes** card | Exporter emits `Deleted (no longer in Notes): <path>` lines in `--verbose` | Notes permanently deleted from Apple Notes since the last sync | Exact paths — confirmed by the exporter |
+| **Drift warning banner** | Indexed HTML count exceeds Apple Notes' live total by ≥ 10 notes or ≥ 2% | Accumulated stale files from long-ago deletions | Count-based — does not name individual files |
+| **Stale HTML files** card | A `--reset-sync` (Force Full Re-export) was run and on-disk HTML doesn't match the fresh watermark | Both stale files AND old copies of notes that moved between folders | Exact paths — the most authoritative signal |
+
+The third signal is the most powerful but only runs on demand because it requires a full re-export. The first two run on every normal sync.
+
+### How to remove notes from the export folder
+
+Three options, from least to most invasive:
+
+**1. The viewer's 🗑 trash icon (single note).**  Hover the date bar at the top of any open note and click 🗑 → **Remove**. This:
+
+- Deletes the HTML file
+- Deletes the `(Attachments)` folder if one exists
+- **Removes the matching watermark entry** so the next sync re-exports the note if it still exists in Apple Notes
+- Removes the note from the viewer immediately (no re-index)
+
+If you delete a note here that *still exists in Apple Notes*, the next ↻ Sync will re-export it and it will reappear. Removal is only permanent for notes you confirm are already gone from Apple Notes.
+
+**2. The Sync Report's "Deleted from Apple Notes" card (bulk, exporter-confirmed).** Appears automatically after any sync where the exporter flagged notes as deleted. Each row has a **Remove** button; **Remove all** clears them in one click. These are the safest bulk removals — the exporter has confirmed each note is gone from Apple Notes.
+
+**3. ⟲ Force Full Re-export (comprehensive).** Available in three places: the **⟲ Force Full Re-export** link in the sidebar footer, the **⟲ Force Full Re-export** button in the drift warning banner, and (implicitly) the equivalent command-line invocation. This:
+
+- Asks for confirmation before proceeding
+- Passes `--reset-sync` to the exporter, which deletes the watermark first
+- Re-exports every note from Apple Notes to its **current** location (correctly placing notes that have moved to Recently Deleted)
+- After export, scans on-disk HTML files against the fresh watermark to identify stale files
+- Shows a **Stale HTML files** card in the Sync Report with per-file **Remove** and bulk **Remove all** buttons
+- Takes substantially longer than a normal sync — several minutes for a large library
+
+This is the only way to bring the export folder fully back in sync with Apple Notes. Use it after deleting many notes from Apple Notes, after the drift warning appears, or whenever you want to be certain the viewer reflects the current state.
+
+### Permutations — what happens when you…
+
+Every common scenario you might run into:
+
+| Action | What happens to the HTML on disk | What you should do |
+|:--|:--|:--|
+| Edit a note in Apple Notes, then ↻ Sync | Exporter re-writes the HTML with new content; old `(Attachments)` files for non-image attachments are pruned automatically | Nothing — works as expected |
+| Move a note to Recently Deleted in Apple Notes, then ↻ Sync | **Nothing** — `modificationDate` is unchanged, so incremental sync skips the note; HTML stays at its old `iCloud/Notes/…` location | Run ⟲ Force Full Re-export to relocate the HTML to `iCloud/Recently Deleted/…` and have the Recently Deleted badge appear |
+| Permanently delete a note in Apple Notes (clear from Recently Deleted), then ↻ Sync | Exporter emits `Deleted (no longer in Notes): <path>`; HTML stays on disk | Click **Remove** in the Sync Report's "Deleted from Apple Notes" card |
+| Delete a note via the viewer's 🗑 trash icon (note still exists in Apple Notes) | HTML and `(Attachments)` deleted; watermark entry removed | Next ↻ Sync re-exports it because the watermark entry is gone |
+| Delete a note via the viewer's 🗑 trash icon (note already gone from Apple Notes) | HTML and `(Attachments)` deleted; watermark entry removed | Stays gone — exporter has nothing to re-write |
+| Delete many notes in Apple Notes at once, then ↻ Sync | Some appear as Recently Deleted (those with changed `modificationDate`); others remain in their old location | Run ⟲ Force Full Re-export to relocate everything correctly |
+| Apple Notes' 30-day Recently Deleted window expires on a note | Exporter emits `Deleted (no longer in Notes):` on next sync; HTML at `iCloud/Recently Deleted/…` stays on disk | Click **Remove** in the "Deleted from Apple Notes" card |
+| Restore a note from Recently Deleted in Apple Notes | Apple Notes updates `modificationDate`; next ↻ Sync re-exports it to its restored location; old `iCloud/Recently Deleted/…` copy stays on disk | Run ⟲ Force Full Re-export to clean up the old copy |
+
+### Summary — when to use Force Full Re-export
+
+Run **⟲ Force Full Re-export** whenever:
+
+- You've moved any notes to Recently Deleted in Apple Notes and want them to appear with the badge in the viewer
+- The Sync Report shows a drift warning
+- You've restored notes from Recently Deleted and old copies remain on disk
+- You want to be certain the viewer matches Apple Notes exactly (e.g. before sharing the export folder, or after a long period without a full re-export)
+
+Avoid running it for trivial reasons — it re-exports every note and can take several minutes on a large library.
 
 ---
 

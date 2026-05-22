@@ -1,29 +1,127 @@
 # Changelog
 
-## [Unreleased]
+## [2.7.0] 22-05-2026
+
+### Fixed
+
+- **Image-only notes not rendering** — notes whose sole content is an image (e.g.
+  "Saved Photo" from the iPhone share sheet) are exported as
+  `<h1><img src="data:image/jpeg;base64,…"></h1>`. The Step 4 `<h1>` suppression in
+  `renderNote()` was hiding this element because `h1.textContent` is empty for image
+  nodes. Fixed: the empty-text check now guards with
+  `h1.querySelector("img, video, svg, canvas, object, embed")` before hiding — an
+  `<h1>` that contains visual elements is preserved even if it has no text.
+
+### Added
+
+- **Stale-note drift detection** — after each incremental sync, the exporter's live
+  Apple Notes count (`Incremental sync: N new/changed of M total`) is captured and
+  compared against the re-indexed HTML count. If the folder contains more notes than
+  Apple Notes reports (drift ≥ 10 notes or 2%, whichever is larger), a yellow warning
+  banner appears in the Sync Report explaining that deleted notes may still be visible
+  and showing the command to run a full re-export. Stored in `log["drift"]`; only fires
+  for incremental syncs where the count line is emitted — benign no-ops and full exports
+  are excluded.
+- **Delete note from viewer** — hover any open note's date bar to reveal a 🗑 trash
+  icon. Click → inline confirmation ("Remove from viewer only? / Cancel / Remove") →
+  the HTML file and its `(Attachments)` folder are deleted from disk, the note is
+  removed from the in-memory index immediately (no re-index), and the sidebar counts
+  update. Auto-advances to the adjacent note. Five server-side guards prevent unsafe
+  deletions: notes_root must be set, path must resolve within notes_root, depth must
+  be exactly 3, file must be `.html`, file must exist. Does not touch Apple Notes —
+  if the note still exists there, the next ↻ Sync will restore it.
+- **Force Full Re-export — in-app `--reset-sync` with stale-file detection** —
+  new ⟲ button in the sidebar footer (and inside the drift warning banner) runs
+  `notes-export export --format html --incremental --reset-sync --verbose` after a
+  confirmation dialog. This is the only reliable way to relocate notes that have moved
+  to Recently Deleted in Apple Notes — the incremental exporter cannot detect Apple-
+  Notes-internal folder moves because the note's `modificationDate` does not change.
+  After the export completes, `_detect_stale_html_files()` scans the fresh watermark
+  (which now contains only entries for notes currently in Apple Notes) against on-disk
+  HTML files at depth 3 and identifies every file that no longer matches a live note.
+  These are surfaced in a new **"Stale HTML files on disk"** card in the Sync Report
+  with individual **Remove** and bulk **Remove all** buttons (sharing the same row UI
+  and `removeStaleFile` helper as the existing "Deleted from Apple Notes" card). The
+  Sync Report header shows "⟲ Forced full re-export" instead of "Incremental sync"
+  for these runs. `POST /api/sync` now accepts `{"reset_sync": true}`; the body field
+  flows through to `_run_export_async(notes_root, bin_path, reset_sync=True)` which
+  conditionally appends `--reset-sync` to the exporter command. `log["reset_sync"]`
+  and `log["stale_files"]` are added to the structured sync log.
+- **Recently Deleted notes visible and flagged** — notes in Apple Notes' Recently Deleted
+  folder are now indexed and visible everywhere (note list, All Notes, search). They are
+  distinguished by a red `🗑 Recently Deleted` pill badge in the note list, a muted title
+  colour, a red active-selection indicator, and a red warning banner at the top of the
+  content pane: *"This note has been deleted from Apple Notes and will be permanently
+  removed within 30 days. It can still be restored from Recently Deleted in Apple Notes."*
+  `_SKIP_FOLDERS` is now an empty set; `_RECENTLY_DELETED_FOLDERS` (lowercase) covers
+  `recently deleted`, `trash`, and `deleted items`. The `recently_deleted: bool` field
+  is included in the client-facing note index so both list and content rendering can
+  branch on it without extra API calls. The sidebar 🗑️ folder icon (already present via
+  the `deleted` flag in `/api/folders`) now appears correctly because the folder is
+  populated.
+- **Delete note — watermark entry removed on delete** — `POST /api/note/delete` now
+  removes the deleted note's entry from `AppleNotesExportSyncWatermark.json` after
+  unlinking the HTML file. Without this, the incremental exporter sees the note as
+  "already exported, unchanged" (watermark `modificationDate` matches Apple Notes) and
+  permanently skips re-exporting it, so a note deleted from the viewer but still present
+  in Apple Notes would never reappear after ↻ Sync. Removing the entry makes the next
+  sync treat the note as brand-new. For notes genuinely gone from Apple Notes the
+  removal is harmless — the exporter simply skips them again. Best-effort: a watermark
+  read/write failure does not fail the delete response.
+- **Attachment cleanup consistency gate fix** — the gate previously compared present
+  on-disk files against `len(watermark_entries)` (all notes ever exported, cumulative).
+  Since `exportedPath` is never cleared for deleted notes, this count grows indefinitely
+  and eventually falls below the 75% threshold on healthy folders with many accumulated
+  deletions, blocking cleanup. Fixed: gate now uses `pre_sync_count` (notes indexed
+  immediately before the export ran, captured from `len(_state["notes"])`). This stays
+  stable regardless of watermark history and only triggers when files actually disappear
+  between syncs (cloud-sync disruption, interrupted export).
+- **Deleted-from-Apple-Notes detection in Sync Report** — `apple-notes-exporter
+  --verbose` emits `Deleted (no longer in Notes): <path>` lines for notes previously
+  exported but since deleted from Apple Notes. The exporter updates its watermark but
+  leaves the HTML on disk. These lines are now parsed during the stderr loop
+  (`_DELETED_NOTE_RE`), deduplicated, and stored in `log["export"]["deleted_notes"]`.
+  The Sync Report renders a **"Deleted from Apple Notes"** phase card listing each file
+  with individual **Remove** and bulk **Remove all** buttons — both call
+  `POST /api/note/delete`. The card is complementary to the count-based drift banner:
+  `deleted_notes` provides exact confirmed paths from this sync's output; the drift
+  banner catches accumulated old deletions beyond that list.
+- **Note file size indicator** — HTML file size is now indexed (`"size": bytes`) and
+  shown in every note list item as a compact badge (e.g. `340 KB`, `1.2 MB`) in the
+  title row alongside the date. Colour-coded by tier: `< 100 KB` near-invisible, `100
+  KB–1 MB` secondary, `≥ 1 MB` amber `#FF9500`, `≥ 5 MB` red `#FF3B30`. HTML size
+  is the authoritative proxy for total note weight (inline base64 images are included).
+  A **↓ Date / ↓ Size** sort toggle in the list-panel meta row lets users sort by
+  largest-first; the date group headers switch to size-bucket headers (`5 MB and
+  above`, `1 – 5 MB`, `100 KB – 1 MB`, `Under 100 KB`) while size sort is active.
+- **Attachment indicator and sidebar filter** — `build_index()` checks for a
+  `{stem} (Attachments)/` directory alongside each HTML file and stores
+  `"has_attachments": bool`. Notes with attachments show a small paperclip SVG icon
+  in the title row. A **Has Attachments** filter pill in a new Filters section at the
+  bottom of the sidebar (above Tags) toggles client-side filtering; the note count
+  updates to `N notes with attachments` and the empty-state message is context-aware.
+  The filter persists across folder and tag changes and ANDs with any active search.
+- **Settings Back button** — when a notes folder is already configured, a `← Back`
+  button appears alongside the `Save & Index Notes` button in a flex row. Clicking
+  it returns to the viewer (`window.location.href = '/'`) without triggering
+  re-indexing. Hidden on first run (no path configured, nowhere to go back to).
 
 ### To Do
 
 - **sync.sh scheme parity** — port `_detect_export_prefix_args()` logic to bash so
   standalone `bash sync.sh` also auto-detects the date-prefix scheme, matching the
   in-app Sync button. Currently only the server-side Sync auto-matches.
-- **Sync progress** — verify verbose output format from `notes-export --verbose` once
-  Full Disk Access is granted to Terminal; confirm per-note stderr line count matches
-  `done` counter in `sync_progress` state.
 - **Pipe tables → HTML tables** — parse pipe-delimited markdown tables inside
   `exporter-prose` blocks and render them as proper `<table>` elements using the app's
   existing styled table CSS (striped rows, borders, rounded corners). Currently rendered
   as monospace fixed-width text.
-- **Literal `**bold**` cleanup** — some exporter output uses raw `**text**` in plain
-  text nodes rather than `<b>**text**</b>` tags (e.g. `**Colour key:**` footer lines).
-  A second regex pass over text nodes inside `.exporter-prose` would strip these
-  remaining `**` markers and apply `<strong>` styling.
 - **System font** — switch the app's base font to `-apple-system, "SF Pro Text",
   sans-serif` to match Apple Notes' native macOS typeface. Low effort, noticeable
   authenticity improvement.
 - **Horizontal rules** — `---` on its own line inside exporter blocks should be
   converted to a `<hr>` element, matching Apple Notes' divider style.
-- when searching highlight the search in the preview pane as well
+- **Search highlight in content pane** — when a search is active, highlight matching
+  terms in the note body as well as the note list snippets.
 
 ---
 
