@@ -1,263 +1,120 @@
 # Apple Notes Viewer — CLAUDE.md
 
-## What this project is
-
-Local single-page web app for browsing and searching Apple Notes exports produced by
-[`apple-notes-exporter`](https://github.com/kzaremski/apple-notes-exporter) CLI.
-v2.7.0 — Python 3 stdlib only, no framework, no build step.
-
----
-
-## Architecture
+Local single-page web app for browsing and searching Apple Notes exports
+produced by [`apple-notes-exporter`](https://github.com/kzaremski/apple-notes-exporter).
+**v3.0.0** — Python 3 stdlib only, no framework, no build step.
 
 | File | Role |
 |:-----|:-----|
-| `server.py` | Python 3 `ThreadingHTTPServer` — indexes notes, serves API + static files |
+| `server.py` | `ThreadingHTTPServer` — indexes notes, serves API + static files |
 | `app.html` | Single-file SPA — all CSS and JS inline |
-| `sync.sh` | Shell wrapper: calls `notes-export export --incremental`, reads path from `config.json` |
-| `Launch Notes.command` | Double-click Finder launcher — kills old instance, opens browser |
-| `config.json` | Gitignored — `{"notes_root": "/abs/path/to/export"}` |
+| `sync.sh` | Shell wrapper: `notes-export export --incremental` (macOS only) |
+| `Launch Notes.command` / `.bat` | Double-click launchers (macOS / Windows) |
+| `config.json` | Gitignored — `{"notes_root": "/abs/path"}` |
+| `docs/ARCHITECTURE.md` | Deep architectural notes — read when changing internals |
+| `docs/API.md` | HTTP endpoint reference |
+| `docs/TEST_PLAN.md` | Pre-release manual test checklist |
 
 ---
 
-## Key architectural decisions and WHY
+## Gotchas — read before making changes
 
-**Async startup** — server binds immediately; indexing runs in a daemon thread.
-`_state["notes_root"]` and `_state["index_progress"]["active"] = True` are set from
-config *before* the HTTP server starts, so the first-run redirect guard works instantly.
+These are the "easy to get wrong, hard to debug" facts. Anything deeper is in
+`docs/ARCHITECTURE.md`.
 
-**Race condition guard** — POST `/settings` and POST `/api/sync` set
-`_state["index_progress"]["active"] = True` *before* calling `_start_rebuild_async()`.
-Without this, the client's first poll sees stale `active: False` and redirects with old data.
+**Async startup race.** POST `/settings` and `/api/sync` must set
+`_state["index_progress"]["active"] = True` *inside the handler*, before
+spawning the rebuild thread, or the client's first poll sees stale state and
+redirects with wrong data.
 
-**Thread-safe state** — single `_state` dict + `_lock`. `_rebuild()` swaps state
-atomically. Each request calls `_snap()` → shallow copy only.
+**Atomic sync claim.** POST `/api/sync` reads `active` and sets it under one
+`with _lock` block. Splitting the read and write reintroduces a race.
 
-**`notes_root` vs `configured_root`** — `_state["notes_root"]` is only set when the
-folder exists; `_state["configured_root"]` always holds the raw config string. Settings
-falls back to `configured_root` so a stale path from another Mac shows in the field.
+**Per-segment URL encoding.** Folder names can contain `#`. Path segments are
+encoded individually with `encodeURIComponent` so `#` → `%23`, not a URL
+fragment. The static handler `unquote()`s on the way in.
 
-**First-run guard exceptions** — `_SETTINGS_PATHS = {"/settings", "/favicon.ico",
-"/api/browse"}`. The browse API must be in this set; if excluded, the Settings page
-folder picker silently fails whenever `notes_root` is `None`.
+**Live DOM for URL rewrites.** Step 2 of `renderNote()` rewrites `src`/`href`
+on the **live** DOM (not the DOMParser doc). Chrome's `innerHTML` serialiser
+decodes `%23` → `#`, which breaks PDF links in notes whose attachment folder
+contains a `#tag`. Don't move this work back into the detached doc.
 
-**Export depth filter** — exporter produces `{Account}/{Folder}/{Title}.html` (depth 3;
-optional `YYYY-MM-DD ` prefix). `len(f.relative_to(notes_root).parts) == 3` is the only
-filter; attachment subdirs (depth 4) skipped. `_SKIP_FOLDERS = set()` (empty — nothing
-is hard-excluded). `_RECENTLY_DELETED_FOLDERS` (lowercase) = `{"recently deleted",
-"trash", "deleted items"}` — notes in these folders are indexed and shown everywhere but
-flagged `recently_deleted: True` in the note dict and client index. See below.
+**`<embed>` is blank in Safari.** Always replace `<embed>`/`<object>` PDFs with
+`<iframe>`. Also: only the **outermost** `[data-pdf-href]` card is replaced
+(inner ones are skipped via `closest()`).
 
-**Per-segment URL encoding** — folder names can contain `#` (Apple Notes hashtag
-folders). Path segments are encoded individually with `encodeURIComponent` so `#`
-becomes `%23`, not a URL fragment. The static handler uses `unquote()` to decode.
+**Empty `<h1>` with image content.** Step 4's hashtag-h1 suppression must
+check for visual children (`img, video, svg, canvas, object, embed`) before
+hiding an empty-text `<h1>`. Notes saved from the iPhone share sheet are
+`<h1><img …></h1>` — visible image, empty `textContent`.
 
-**Note size and attachment fields** — `build_index()` calls `html_file.stat()` once per
-note (for both mtime fallback and size). `"size": st.st_size` (bytes, not `_`-prefixed →
-passes to client index) is the HTML file size — a faithful proxy for total note weight
-because inline base64 images are included. `"has_attachments": bool` is set by checking
-`html_file.parent / (html_file.stem + " (Attachments)")` — one `is_dir()` call. The
-client uses these for the size badge + sort-by-size and the sidebar attachment filter.
-`applyFiltersAndSort()` runs after every `loadNoteList()` fetch; it applies `attachFilter`
-and re-sorts by size desc when `sortMode === "size"`. Sort toggle and attachment filter
-are independent of folder/tag changes — never reset on navigation.
+**Filename scheme parity.** `_detect_export_prefix_args()` matches the export
+folder's existing scheme (date-prefix vs none). A forced mismatch makes the
+incremental manifest treat every note as new and silently duplicates the
+library. Never weaken the detection or hardcode the scheme. `sync.sh` does
+NOT auto-detect — only the in-app Sync.
 
-**Date source** — `<meta name="modified" content="D Mon YYYY at H:MM am/pm">` parsed
-first; mtime is the fallback (survives rsync/OS migration that corrupts mtime). The
-`YYYY-MM-DD ` filename prefix is stripped (lines 174, 193) and is **never** a date
-source — purely cosmetic. The exporter's default is *no* prefix; `--add-date-prefix`
-adds the creation date. A scheme mismatch vs. existing files makes the incremental
-manifest treat every note as new → silent whole-library duplication. `_run_export_async`
-calls `_detect_export_prefix_args()` to auto-match the existing scheme (watermark
-`exportedPath`s, else on-disk scan; ≥80% date-prefixed → `--add-date-prefix
---date-format iso`). `sync.sh` does NOT auto-detect — only the in-app Sync does.
+**Cloud-sync folders are dangerous.** A `notes_root` inside Syncthing/Dropbox/
+iCloud Drive propagates cross-machine deletes in, which looks like data loss.
+`_prune_orphan_attachments` aborts if fewer than `_GATE_THRESHOLD` (75%) of
+`pre_sync_count` notes are still on disk. Denominator must be
+`pre_sync_count` (captured before the export) — `len(watermark_entries)` is
+cumulative and grows over time, causing false gate fires.
 
-**Tag extraction — dual source, two thresholds** — apple-notes-exporter embeds Apple
-Notes' native tags in the filename stem (e.g. `2026-04-12 Meeting #work.html`). These
-are `_stem_tags` (authoritative, shown if count ≥ 1). Body text also scanned for
-`body_tags` (shown only if ≥ 2, noise filter). `_TAG_RE` matches letter-start tags ≥ 2
-chars (`#AI`) and digit-start tags with ≥ 1 letter (`#10SmallSt`, `#60thBigBash`).
+**Three orphan-cleanup guards.** `_IMAGE_EXTS` skip (images are dual-written
+by the exporter, never path-referenced); `if not referenced: continue` (HTML
+has no path-refs into the folder); mtime guard (file is newer than the HTML).
+Removing any one re-enables a real false-deletion class. The watermark is
+used **only** for the consistency gate, not for per-file detection.
 
-**PDF rendering — `<iframe>` replacement, live DOM only** — `<embed>`/`<object>` and
-`data-pdf-href` attachment cards are replaced with `<iframe>` in the live DOM. URL
-rewriting must not happen in the detached DOMParser doc — Chrome's `innerHTML` serialiser
-decodes `%23` back to `#`. Only the outermost `[data-pdf-href]` element is replaced;
-inner ones are skipped via `closest()`. Delegated click listener on `#contentPanel`
-with a `.pdf` href fallback catches any card the marking pass missed.
+**Delete = unlink + watermark prune.** `POST /api/note/delete` removes the
+HTML, the `(Attachments)/` folder, AND the watermark entry keyed by
+`exportedPath`. If the watermark entry survives, the incremental exporter
+sees the note as already-exported and never restores it after a sync.
 
-**Hashtag `<h1>` suppression** — the exporter splits "Title #tag" into multiple `<h1>`
-elements per token. `renderNote()` Step 4 hides subsequent `<h1>`s whose text is solely
-`#hashtag` tokens or whitespace, preventing duplicate heading clutter. Critical guard:
-an `<h1>` whose `textContent` is empty is only hidden if it contains no visual children
-(`img, video, svg, canvas, object, embed`). Notes saved from the iPhone share sheet
-produce `<h1><img src="data:image/jpeg;base64,…"></h1>` — the image `<h1>` has empty
-text but must not be suppressed.
+**Recently Deleted is indexed.** `_SKIP_FOLDERS` is empty;
+`_RECENTLY_DELETED_FOLDERS` marks notes with `recently_deleted: True`. The
+client renders a red badge + warning banner. Don't add them back to
+`_SKIP_FOLDERS` — the badge IS the user signal.
 
-**Indeterminate scan phase** — `build_index()` calls `rglob("*.html")` before the total
-count is known. When `index_progress.total == 0`, the startup overlay and Settings
-progress bar show an animated sweep + "Scanning notes folder…" instead of "0 / 0".
+**Force Full Re-export is the only signal for in-Apple-Notes folder moves.**
+The incremental exporter cannot detect a note moving between Apple Notes
+folders (most importantly into Recently Deleted) — its `modificationDate`
+doesn't change. `--reset-sync` wipes the watermark first; after the export
+`_detect_stale_html_files()` finds HTML at old paths. Never call
+`_detect_stale_html_files()` after a non-reset sync (the cumulative
+watermark would falsely flag long-deleted notes' files).
 
-**`notes-export` binary probe** — Finder/launchd strip PATH to a minimal set, so
-`shutil.which("notes-export")` fails when launched via `Launch Notes.command`.
-`_find_notes_export_bin()` probes five hardcoded paths, including the app bundle at
-`/Applications/Apple Notes Exporter.app/Contents/SharedSupport/notes-export`. `sync.sh`
-applies the same probe. Never rely on PATH alone for this binary.
+**Benign no-op is success.** `notes-export` exits non-zero when there's
+nothing to do ("All notes are up to date…"). The export phase scans stderr
+for benign phrases and normalises `exit_code` to 0. Never revert to a bare
+`returncode != 0` failure check.
 
-**Exporter `<pre>` fragmentation** — `apple-notes-exporter` wraps every text run between
-bold markers in its own `<pre style='background:#f5f5f5'>` element. `renderNote()` Step 5
-collapses consecutive runs (fingerprint: `background:\s*#f5f5f5` on the style attribute),
-merges their `innerHTML`, strips `**` bold delimiters, converts markdown headings/bullets/
-pipe-tables, and outputs a single `.exporter-prose` div. All processing is on live DOM
-nodes — never on a detached/serialised document (see PDF `%23` gotcha above).
+**Stderr `done` ≠ note count.** `sync_progress["done"]` counts non-empty
+stderr lines, NOT notes — the exporter emits >1 line/note in an unverified
+format. The client clamps `done` to `total` (only set for full exports) for
+a % bar; incremental shows an honest indeterminate sweep. Never parse the
+stderr stream into a note name (that produced garbage like `1683]`).
 
-**Sync progress state** — `_state["sync_progress"]` holds `{active, done, total, current,
-error}`. POST `/api/sync` sets `active: True` before spawning `_run_export_async()`;
-GET `/api/sync` includes the full `sync_progress` snapshot. The client polls GET during
-export (via `pollSyncProgress`), then hands off to `pollIndexProgress` for re-indexing.
-`done` is the **stderr-line count** from `--verbose`, NOT a note count (freeform
-stream, >1 line/note — it overshoots the real total). `total` is only set for a
-*full* export (no watermark) via `list-notes`; the client clamps `done` to it for a
-% bar. Incremental leaves `total` 0 → honest indeterminate sweep, no number. Never
-parse `current`/stderr into a note name (that produced garbage like `1683]`).
-
-**Benign no-op is success** — `notes-export` exits non-zero when there's nothing to
-export ("All notes are up to date, nothing to export."). The export phase scans
-stderr for benign-no-op phrases ("nothing to export", "all notes are up to date",
-"no notes to export", "no changes"); if matched, a non-zero exit is NOT treated as
-failure and `exit_code` is normalised to 0. Never revert to a bare
-`if proc.returncode != 0` failure check — an unchanged library exits non-zero.
-
-**Sync log** — `_state["sync_log"]` is a structured dict built by `_run_export_async`
-across all phases: `{timestamp, type, scheme, export:{duration_s, stderr_lines[-500:],
-stderr_total, exit_code, error, exporter_total, deleted_notes:[path,…]},
-cleanup:{files_removed, bytes_freed, dirs_removed, items:[{note,file,size}], skipped,
-skip_reason}, reindex:{notes_indexed, duration_s}, drift:{detected, stale_count, indexed,
-exporter_total}, full_log:[…], total_duration_s}`. `full_log` is the entire run —
-exporter stderr + cleanup action lines — captured from `sync_progress["lines"]` after
-cleanup; the report's top pane renders it as a tall scrollable terminal
-(`.synclog-live-pre.review`). `_wait_for_reindex` thread writes the final log once
-`index_progress.active` goes False. Served by `GET /api/sync-log`; powers the Sync
-Report modal. `GET /api/sync` also returns `live_lines` — last 50 of
-`sync_progress["lines"]` — for the live output pane. `sync_progress["lines"]`
-accumulates stderr lines in-memory (capped at 1000; last 800 kept when trimmed).
-`_emit_sync_line()` is the thread-safe appender used by the cleanup phase to stream
-`✗ orphan removed` / `✗ empty folder removed` lines into that buffer so they appear
-in both the live pane and `full_log`. `_prune_orphan_attachments` returns a dict (not
-tuple) with `items` per deleted file so the modal can show a per-note × per-file
-cleanup table.
-
-**Deleted-notes detection** — `apple-notes-exporter --verbose` emits
-`Deleted (no longer in Notes): <path>` lines for notes it previously exported that
-have since been removed from Apple Notes. The exporter updates its watermark for these
-but does **not** delete the HTML from disk. `_DELETED_NOTE_RE` captures these lines
-during the stderr loop; paths are deduplicated and stored in
-`log["export"]["deleted_notes"]`. The Sync Report renders a "Deleted from Apple Notes"
-phase card listing each file with individual **Remove** buttons and a bulk **Remove all**
-button — both call `POST /api/note/delete`. A drift banner is also shown when the
-count-based threshold fires (≥ 10 notes or 2% over the exporter total). The two signals
-are complementary: `deleted_notes` gives exact paths from this sync's verbose output;
-the drift banner catches accumulated old deletions not in that list.
-
-**Force Full Re-export (`reset_sync`)** — `POST /api/sync` accepts
-`{"reset_sync": true}`; the flag flows through to
-`_run_export_async(notes_root, bin_path, reset_sync=True)`, which appends
-`--reset-sync` to the exporter command (still combined with `--incremental` — the
-exporter requires both). The watermark is wiped before the export runs, so every note
-is treated as new and re-exported to its current Apple Notes location. **This is the
-only signal the app has for Apple-Notes-internal folder moves** (most importantly,
-notes moved into Recently Deleted) — the incremental exporter cannot detect them
-because `modificationDate` does not change on a folder move. After a `reset_sync`
-run, `_detect_stale_html_files()` scans the fresh watermark's `exportedPath` set
-against on-disk HTML files at depth 3 and returns those not matched. Results land in
-`log["stale_files"]` as `[{path, title, size}, …]`. The Sync Report renders a "Stale
-HTML files on disk" card with the same per-row Remove + bulk Remove-all pattern as
-"Deleted from Apple Notes". Never call `_detect_stale_html_files()` after a normal
-(non-reset) sync — the cumulative watermark contains entries for notes deleted years
-ago whose files do still exist, so on-disk files would be incorrectly flagged. The
-client wires Force Full Re-export through `confirmForceFullReExport()` →
-`runSync(true)`; both the sidebar `#syncForceLink` and the drift banner's
-`.synclog-force-btn` call into it. The confirmation dialog is intentionally a plain
-`window.confirm()` — modal overlays would conflict with the live sync report opening.
-
-**Recently Deleted indexing** — `_SKIP_FOLDERS` is now empty. Notes in
-`_RECENTLY_DELETED_FOLDERS` are indexed normally but carry `recently_deleted: True` in
-the note dict (not `_`-prefixed, so it passes through to the client index). The client
-uses this field in two places: (1) `renderList()` adds a `.is-deleted-note` CSS class
-and a `.note-deleted-pill` badge (`🗑 Recently Deleted`) between the title row and the
-snippet; (2) `renderNote()` inserts a `.recently-deleted-banner` between the content-bar
-and the scroll area. The sidebar 🗑️ folder icon comes from the existing `is_del` flag
-in `/api/folders` (unchanged). Recently deleted notes appear in All Notes and search —
-they are NOT excluded, only visually distinguished. Do not add "Recently Deleted" back
-to `_SKIP_FOLDERS`; the warning banner is the correct signal for the user.
-
-**Sync Report modal flow** — opens *at sync start* in live mode (× disabled); transitions
-to re-index mode when export completes; transitions to report mode (full phase cards) when
-done; then blocks on "Done — return to notes" button before calling loadFolders/loadTags/
-loadNoteList. This ensures the user sees what changed before the list refreshes. Log button
-in sidebar footer re-opens the report at any time. `window._syncLog` exposes the API:
-`{openLive, updateLive, updateReindex, showReport, showError}`. The Done button's
-`onclick` is set dynamically in the syncBtn handler for each sync run.
-
-**Exporter is additive — we prune orphans** — `notes-export` has no clean/mirror
-flag; replacing or removing a note's **non-image** attachment leaves the old file behind.
-After every successful export `_prune_orphan_attachments()` scans every `(Attachments)/`
-dir on disk, parses `href`/`src` attributes in the corresponding note HTML, and deletes
-unreferenced **non-image** files. Three critical guards prevent false deletions:
-(1) `_IMAGE_EXTS` — image files (`.png`, `.jpg`, `.jpeg`, `.gif`, `.heic`, `.heif`,
-`.tiff`, `.tif`, `.bmp`, `.webp`, `.svg`, `.avif`) are NEVER deleted. The exporter
-dual-writes images: base64 inline in the HTML AND a raw copy in `(Attachments)/`. The raw
-copy is never referenced by path, so it would always appear orphaned without this guard.
-(2) `if not referenced: continue` — if the HTML has zero path-references into the
-`(Attachments)/` folder, skip it entirely. Either all content is base64 (nothing to clean)
-or the HTML is a stale pre-rename copy (wrong match). (3) mtime guard — non-referenced
-files newer than the HTML are skipped; the HTML predates them and cannot be authoritative.
-Watermark used ONLY for the consistency gate (<75% notes present → abort). The gate
-denominator is `pre_sync_count` (notes indexed before the export ran), NOT
-`len(watermark_entries)`. The watermark is cumulative — exportedPath is never cleared
-for deleted notes, so `len(entries)` grows over time and falsely triggers the gate on
-healthy folders with accumulated deletions. `pre_sync_count` is captured from
-`len(_state["notes"])` before the export starts and passed into `_prune_orphan_attachments`
-as a parameter. Never revert to `len(entries)` as the denominator. Never remove the
-three deletion guards — each one fixes a real false-deletion class.
+**Index version bumps on `_rebuild()`.** `_state["index_version"]` is the
+client cache key returned by `/api/index-status`. The browser short-circuits
+`/api/notes` fetches when version + folder are unchanged. Don't forget to
+bump it if you ever change `_rebuild()` to skip the swap.
 
 ---
 
 ## Persistence
 
-`config.json` (gitignored) — Notes folder path only. `localStorage` — panel widths
-(`notes-sidebar-w`, `notes-list-w`) and theme. Nothing else is written to disk.
+`config.json` (gitignored) — notes folder path only.
+`localStorage` — theme (`notes-theme`), panel widths (`notes-sidebar-w`,
+`notes-list-w`), sort mode (`notes-sort`), attachment filter
+(`notes-attach-filter`). Nothing else is written to disk.
 
-## Never do
+## Tunable thresholds (named constants in `server.py`)
 
-- Never call `_rebuild()` synchronously from a request handler — it holds `_lock`
-  for the full index duration and starves other threads.
-- Never set `active: True` only inside `build_index()` — the POST handler must set it
-  first or the race condition returns.
-- Never use `<embed type="application/pdf">` — always replace `<embed>`/`<object>`
-  with `<iframe>`; `<embed>` renders blank in Safari.
-- Never remove `/api/browse` from `_SETTINGS_PATHS` — the Settings folder picker
-  silently breaks when `notes_root` is `None`.
-- Never rewrite URLs or set `data-pdf-href` in a detached DOMParser document —
-  Chrome's `innerHTML` serialiser decodes `%23` back to `#`, breaking PDF links in
-  notes whose attachment folder contains a `#tag`.
-- Never process inner `[data-pdf-href]` elements when replacing attachment cards —
-  only the outermost; inner elements are guarded by `closest()`.
-- Never hardcode the Sync filename scheme or weaken `_detect_export_prefix_args()`
-  — Sync must match the existing folder's scheme (prefix vs none); a forced
-  mismatch makes the incremental manifest duplicate the whole library.
-- Never assume note loss when files vanish — the export is a derived artefact;
-  Apple Notes is the source of truth. A `notes_root` inside a Syncthing/Dropbox/
-  iCloud share will propagate cross-machine deletions in (looks like data loss,
-  isn't). `_prune_orphan_attachments` aborts if <75% of watermark notes are on
-  disk; never weaken that gate.
-- Never commit `config.json` — it contains absolute local paths.
-- Never increase the `sleep` in `Launch Notes.command` — the server starts async and
-  shows a loading screen; sleeping longer does not fix slow startup.
-- Never delete an HTML file without also removing its watermark entry from
-  `AppleNotesExportSyncWatermark.json`. The incremental exporter skips any note whose
-  watermark `modificationDate` matches Apple Notes — if the entry survives the delete,
-  the exporter sees the note as "already exported, unchanged" and never rewrites it,
-  leaving the viewer with a permanently missing note even though Apple Notes still has
-  it. `POST /api/note/delete` removes the matching entry (keyed by `exportedPath`) as
-  a best-effort step after unlinking the HTML. For notes that are genuinely gone from
-  Apple Notes, removing the entry is harmless — the exporter simply skips them again.
+`_GATE_THRESHOLD` (0.75), `_PREFIX_DETECT_THRESHOLD` (0.80),
+`_DRIFT_THRESHOLD_ABS` (10), `_DRIFT_THRESHOLD_PCT` (0.02),
+`_MAX_REFERENCED_HTML_SIZE` (10 MB), `_INDEX_READ_MAX` (64 KB),
+`_SEARCH_BODY_MAX` (8 KB), `_EXPORT_TIMEOUT_SEC` (300),
+`_REINDEX_WAIT_TIMEOUT_SEC` (600), `_LIVE_LINES_MAX/_KEEP/_TAIL`
+(1000/800/200).

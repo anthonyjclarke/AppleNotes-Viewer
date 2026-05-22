@@ -2,7 +2,7 @@
 
 A local web app for browsing and searching your Apple Notes exports. Runs entirely on your machine — no cloud, no accounts, no runtime dependencies beyond Python 3.
 
-> **v2.7.0** — Built around [`apple-notes-exporter`](https://github.com/kzaremski/apple-notes-exporter). See [CHANGELOG.md](CHANGELOG.md) for what changed.
+> **v3.0.0** — Built around [`apple-notes-exporter`](https://github.com/kzaremski/apple-notes-exporter). See [CHANGELOG.md](CHANGELOG.md) for what changed. Internals: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · API: [docs/API.md](docs/API.md) · Tests: [docs/TEST_PLAN.md](docs/TEST_PLAN.md).
 
 ---
 
@@ -16,13 +16,15 @@ A local web app for browsing and searching your Apple Notes exports. Runs entire
 - **Full-text search** — searches complete note body text, not just visible snippets; results highlighted as you type
 - **Folder navigation** — browse a single Apple Notes folder or search across all notes with one click
 - **Tag pills** — detects `#hashtags` from note text and filenames, matching Apple Notes exactly (including digit-first tags like `#10SmallSt` and short tags like `#AI`); displayed as clickable pill chips
-- **Sort by date or size** — notes sorted newest-edited first by default; a toggle in the list panel switches to largest-first, with size-bucket group headers; each note shows a compact file-size badge colour-coded by tier (amber ≥ 1 MB, red ≥ 5 MB)
-- **Attachment indicator and filter** — notes that have an `(Attachments)` folder show a paperclip icon in the title row; a **Has Attachments** filter pill in the sidebar narrows the list to those notes only, combining with any active folder, tag, or search filter
+- **Sort by date or size** — notes sorted newest-edited first by default; a toggle in the list panel switches to largest-first, with size-bucket group headers; each note shows a compact file-size badge colour-coded by tier (amber ≥ 1 MB, red ≥ 5 MB); preference persists across reloads
+- **Attachment indicator and filter** — notes that have an `(Attachments)` folder show a paperclip icon in the title row; a **Has Attachments** filter pill in the sidebar narrows the list to those notes only, combining with any active folder, tag, or search filter; preference persists across reloads
 - **Resizable columns** — drag either panel divider; preferences saved across sessions
 - **PDF inline viewer** — PDF attachment cards rendered directly in the note body as inline iframes; Safari and Chrome both display them natively
 - **About panel** — "i" button in the sidebar opens version info, a how-to-use guide, and attribution
 - **Image lightbox** — click any embedded image to open it full-screen
-- **Sync button** — re-runs the exporter incrementally and re-indexes, without restarting the server (macOS only)
+- **Sync button + Sync Report** — re-runs the exporter incrementally and re-indexes, without restarting the server (macOS only); live progress modal during the run, phase-by-phase summary card afterward
+- **Sync Log button** — re-opens the latest sync's full terminal log at any time
+- **Force Full Re-export** — sidebar link runs `--reset-sync` to relocate notes that have moved between Apple Notes folders (most importantly into Recently Deleted)
 - **Startup loading screen** — server is immediately available; a progress bar tracks the index while notes load
 - **Light and dark mode** — toggle in the sidebar; preference persists
 - **No runtime dependencies** — Python 3 stdlib only; one file to serve the whole app

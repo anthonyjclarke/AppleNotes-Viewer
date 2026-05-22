@@ -19,7 +19,7 @@ from datetime import datetime
 BASE_DIR    = Path(__file__).parent
 APP_HTML    = BASE_DIR / "app.html"
 PORT        = 8765
-APP_VERSION = "2.7.0"
+APP_VERSION = "3.0.0"
 
 _CONFIG_FILE  = BASE_DIR / "config.json"
 _SKIP_FOLDERS = set()   # Apple Notes folders excluded entirely from the index
@@ -148,6 +148,7 @@ _state: dict = {
     "index_progress":  {"active": False, "done": 0, "total": 0},
     "sync_progress":   {"active": False, "done": 0, "total": 0, "current": "", "error": None},
     "sync_log":        None,   # structured report from the last completed sync
+    "index_version":   0,      # bumped on every _rebuild() — clients use it to cache /api/notes
 }
 
 
@@ -181,8 +182,15 @@ def build_index(notes_root: Path) -> list:
         att_dir         = html_file.parent / (html_file.stem + " (Attachments)")
         has_attachments = att_dir.is_dir()
 
+        # Read at most _INDEX_READ_MAX bytes. Title and <meta name="modified"> are
+        # always within the first ~1 KB; snippet caps at 280 chars; the search
+        # corpus caps at _SEARCH_BODY_MAX of body text. Notes larger than the cap
+        # are typically multi-MB base64 image dumps with little additional text
+        # past the head — reading the rest would waste memory for no benefit.
         try:
-            raw = html_file.read_text(encoding="utf-8", errors="ignore")
+            with open(html_file, "rb") as fh:
+                raw_bytes = fh.read(_INDEX_READ_MAX)
+            raw = raw_bytes.decode("utf-8", errors="ignore")
         except Exception:
             continue
 
@@ -206,14 +214,15 @@ def build_index(notes_root: Path) -> list:
         if date is None:
             date = datetime.fromtimestamp(st.st_mtime)
 
-        body    = p.body_text()
-        snippet = body[:280].strip()
+        body         = p.body_text()
+        snippet      = body[:280].strip()
+        search_body  = body[:_SEARCH_BODY_MAX]    # cap memory; matches usually near top
 
         # Tags in the filename stem are Apple Notes' native tags — authoritative source.
         # Strip the leading "YYYY-MM-DD " date prefix before extracting.
         stem      = re.sub(r"^\d{4}-\d{2}-\d{2} ", "", html_file.stem)
         stem_tags = extract_tags(stem)
-        body_tags = extract_tags(title + " " + body)
+        body_tags = extract_tags(title + " " + search_body)
         all_tags  = stem_tags | body_tags
 
         notes.append({
@@ -225,7 +234,7 @@ def build_index(notes_root: Path) -> list:
             "size":             file_size,          # HTML file size in bytes (includes inline base64 images)
             "has_attachments":  has_attachments,    # True → (Attachments)/ folder exists alongside HTML
             "recently_deleted": recently_deleted,   # True → note is pending deletion in Apple Notes
-            "_search":          (title + " " + body).lower(),
+            "_search":          (title + " " + search_body).lower(),
             "_path":            str(html_file),
             "_tags":            all_tags,
             "_stem_tags":       stem_tags,          # filename-sourced tags (native Apple Notes tags)
@@ -277,11 +286,12 @@ def _rebuild(notes_root: Path | None = None) -> None:
     ]
 
     with _lock:
-        _state["notes"]      = notes
-        _state["index"]      = index
-        _state["folders"]    = folders
-        _state["tags"]       = tags
-        _state["notes_root"] = notes_root
+        _state["notes"]         = notes
+        _state["index"]         = index
+        _state["folders"]       = folders
+        _state["tags"]          = tags
+        _state["notes_root"]    = notes_root
+        _state["index_version"] = _state.get("index_version", 0) + 1
         # Mark complete AFTER state is fully swapped so clients see consistent data
         _state["index_progress"]["active"] = False
         _state["index_progress"]["done"]   = _state["index_progress"]["total"]
@@ -347,6 +357,41 @@ _IMAGE_EXTS = frozenset({
     ".tiff", ".tif", ".bmp", ".webp", ".svg", ".avif",
 })
 
+# ── Tunable thresholds (named so they're discoverable) ──────────────────
+# Maximum HTML bytes read by _referenced_attachments() — base64-image-heavy notes
+# (multi-MB) are skipped entirely rather than parsed, to avoid expensive reads on
+# every sync. The threshold sits well above any realistic plain-text note size.
+_MAX_REFERENCED_HTML_SIZE = 10 * 1024 * 1024   # 10 MB
+
+# Consistency gate for orphan-attachment cleanup — abort if fewer than this
+# fraction of pre-sync notes are still present on disk after the export.
+_GATE_THRESHOLD = 0.75
+
+# Filename-scheme auto-detection threshold — append --add-date-prefix only when
+# at least this fraction of existing files use the date prefix.
+_PREFIX_DETECT_THRESHOLD = 0.80
+
+# notes-export subprocess wall-clock timeout (seconds).
+_EXPORT_TIMEOUT_SEC = 300
+
+# Live sync line buffer caps for the streaming output pane.
+_LIVE_LINES_MAX  = 1000   # hard ceiling before trimming
+_LIVE_LINES_KEEP = 800    # how many to keep after trim
+_LIVE_LINES_TAIL = 200    # last-N returned by GET /api/sync for the live pane
+
+# Indexing-time read cap per HTML file. Title + <meta name="modified"> are always
+# within the first ~1 KB; snippet caps at 280 chars; the search corpus is capped
+# at _SEARCH_BODY_MAX of the body text. Keeping reads bounded eliminates the
+# multi-hundred-MB transient memory spike on indexing libraries that contain
+# multi-MB inline-base64 image notes.
+_INDEX_READ_MAX  = 64 * 1024   # 64 KB read cap during build_index()
+_SEARCH_BODY_MAX = 8 * 1024    # 8 KB cap on body text added to _search
+
+# _wait_for_reindex exit timeout — if the index doesn't complete within this
+# window, the wait thread gives up and marks the partial log complete. Prevents
+# an indefinite zombie thread when _rebuild() crashes silently.
+_REINDEX_WAIT_TIMEOUT_SEC = 600   # 10 minutes
+
 
 def _fmt_size(n: int) -> str:
     """Human-readable byte size for log lines (e.g. 1.4 MB, 812 KB)."""
@@ -385,8 +430,8 @@ def _referenced_attachments(html_path: Path, att_dir: Path) -> "set[str] | None"
     should leave the folder untouched). Never raises.
     """
     try:
-        if html_path.stat().st_size > 10 * 1024 * 1024:
-            return None   # base64-image-heavy notes; skip rather than read 10 MB
+        if html_path.stat().st_size > _MAX_REFERENCED_HTML_SIZE:
+            return None   # base64-image-heavy notes; skip rather than read
         text = html_path.read_text(encoding="utf-8", errors="replace")
     except Exception:
         return None
@@ -479,7 +524,7 @@ def _prune_orphan_attachments(notes_root: Path, pre_sync_count: int = 0) -> dict
         if ep.endswith(".html") and (notes_root / ep).is_file():
             present += 1
     gate_denom = pre_sync_count if pre_sync_count > 0 else len(entries)
-    if gate_denom and present < 0.75 * gate_denom:
+    if gate_denom and present < _GATE_THRESHOLD * gate_denom:
         reason = (
             f"Attachment cleanup skipped — export folder inconsistent "
             f"({present} of {gate_denom} notes on disk). "
@@ -692,7 +737,7 @@ def _detect_export_prefix_args(notes_root: Path) -> list[str]:
         return []
     prefixed = sum(1 for p in paths if _DATE_PREFIX_RE.search("/" + p))
     return ["--add-date-prefix", "--date-format", "iso"] \
-        if prefixed >= 0.80 * len(paths) else []
+        if prefixed >= _PREFIX_DETECT_THRESHOLD * len(paths) else []
 
 
 def _run_export_async(notes_root: Path, bin_path: str,
@@ -842,10 +887,10 @@ def _run_export_async(notes_root: Path, bin_path: str,
                                 sp_lines[-1] = sp_lines[-1] + "  " + line
                         else:
                             sp_lines.append(line)
-                        # Keep most recent 1000 lines; trim if needed
-                        if len(sp_lines) > 1000:
-                            del sp_lines[:-800]
-            proc.wait(timeout=300)
+                        # Keep most recent N lines; trim if needed
+                        if len(sp_lines) > _LIVE_LINES_MAX:
+                            del sp_lines[:-_LIVE_LINES_KEEP]
+            proc.wait(timeout=_EXPORT_TIMEOUT_SEC)
             log["export"]["duration_s"]   = round(time.monotonic() - t_export)
             log["export"]["stderr_total"] = done
             log["export"]["stderr_lines"] = stderr_lines[-500:]  # cap for UI
@@ -876,7 +921,7 @@ def _run_export_async(notes_root: Path, bin_path: str,
         except subprocess.TimeoutExpired:
             try: proc.kill()
             except Exception: pass
-            err = "Export timed out after 5 minutes"
+            err = f"Export timed out after {_EXPORT_TIMEOUT_SEC // 60} minutes"
             log["export"]["error"]      = err
             log["export"]["duration_s"] = round(time.monotonic() - t_export)
             log["total_duration_s"]     = round(time.monotonic() - t0)
@@ -964,17 +1009,25 @@ def _run_export_async(notes_root: Path, bin_path: str,
 
         # Finalise the log once indexing completes — updates reindex stats and
         # sets log_complete=True so the client can render the complete report.
+        # A wall-clock timeout (_REINDEX_WAIT_TIMEOUT_SEC) prevents an indefinite
+        # zombie thread if _rebuild() crashes silently and never sets active=False.
         def _wait_for_reindex():
+            deadline = time.monotonic() + _REINDEX_WAIT_TIMEOUT_SEC
             while True:
                 time.sleep(0.2)
                 with _lock:
                     ip = dict(_state["index_progress"])
-                if not ip.get("active", False):
+                timed_out = time.monotonic() > deadline
+                if not ip.get("active", False) or timed_out:
                     with _lock:
                         note_count = len(_state["notes"])
                     log["reindex"]["notes_indexed"] = note_count
                     log["reindex"]["duration_s"]    = round(time.monotonic() - t_reindex)
                     log["total_duration_s"]         = round(time.monotonic() - t0)
+                    if timed_out:
+                        log["reindex"]["error"] = (
+                            f"Re-index wait timed out after "
+                            f"{_REINDEX_WAIT_TIMEOUT_SEC // 60} minutes")
 
                     # ── Drift detection ───────────────────────────────────
                     # If indexed count exceeds the exporter's live Apple Notes
@@ -1462,7 +1515,7 @@ class Handler(BaseHTTPRequestHandler):
             last = state["last_sync"]
             with _lock:
                 sync_prog  = dict(_state["sync_progress"])
-                live_lines = list(_state["sync_progress"].get("lines", [])[-200:])
+                live_lines = list(_state["sync_progress"].get("lines", [])[-_LIVE_LINES_TAIL:])
             self._json({
                 "last_synced":   last.isoformat() if last else None,
                 "count":         len(state["notes"]),
@@ -1480,9 +1533,15 @@ class Handler(BaseHTTPRequestHandler):
 
         elif path == "/api/index-status":
             with _lock:
-                prog  = dict(_state["index_progress"])
-                count = len(_state["notes"])
-            self._json({**prog, "count": count, "version": APP_VERSION})
+                prog          = dict(_state["index_progress"])
+                count         = len(_state["notes"])
+                index_version = _state.get("index_version", 0)
+            self._json({
+                **prog,
+                "count":         count,
+                "version":       APP_VERSION,
+                "index_version": index_version,   # bumped per _rebuild() — client cache key
+            })
 
         elif path == "/api/browse":
             # Directory browser used by the settings page file picker.
@@ -1585,12 +1644,8 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:
                 pass   # invalid JSON → treat as plain sync, don't fail
 
-            with _lock:
-                already = _state["sync_progress"].get("active", False)
-            if already:
-                self._json({"status": "syncing"})
-                return
-
+            # Pre-flight checks before the atomic claim — failures should not flip
+            # the active flag.
             notes_root = _state.get("notes_root")
             if not notes_root:
                 self._json({"status": "error",
@@ -1609,7 +1664,12 @@ class Handler(BaseHTTPRequestHandler):
                 })
                 return
 
+            # Atomic claim: check-then-set inside one lock window so two
+            # near-simultaneous POSTs can't both start a sync.
             with _lock:
+                if _state["sync_progress"].get("active", False):
+                    self._json({"status": "syncing"})
+                    return
                 _state["sync_progress"] = {
                     "active": True, "done": 0, "total": 0,
                     "current": "Starting…", "error": None,
