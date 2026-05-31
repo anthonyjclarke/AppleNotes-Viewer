@@ -2,7 +2,7 @@
 
 > **ARCHIVED — v1.0 only. This document does not apply to v2.0.**
 >
-> v2.0 is a complete rewrite built around [`apple-notes-exporter`](https://github.com/nicholasstephan/apple-notes-exporter).
+> v2.0 is a complete rewrite built around [`apple-notes-exporter`](https://github.com/kzaremski/apple-notes-exporter).
 > The folder layout, setup workflow, sync process, and architecture described below
 > are all superseded. Refer to [README.md](../README.md) for setup and
 > [CLAUDE.md](../CLAUDE.md) for architecture.

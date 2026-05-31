@@ -1,6 +1,94 @@
 # Changelog
 
+## [3.0.0] 01-06-2026
+
+Major release — code-quality, performance, accessibility and documentation pass on
+top of v2.7.0. No user-facing behaviour regressions; UX additions are explicitly
+listed below. Internal architectural improvements summarised at the top of each
+section.
+
+### Added
+
+- **Sort and attachment filter persist across reloads** — `sortMode` and
+  `attachFilter` now stored in `localStorage` (`notes-sort`, `notes-attach-filter`).
+  Open the app and your last-used sort/filter combination is restored.
+- **`aria-pressed` on toggle buttons** — `searchAllPill`, `sortToggle`,
+  `attachFilterPill`, theme toggle, and note-delete confirm buttons now announce
+  their state to screen readers.
+- **Force-close on stuck sync** — after 60 seconds with no live-output activity,
+  the Sync Report modal's × button re-enables so the user can dismiss it without
+  waiting for the 5-minute subprocess timeout.
+- **API documentation** — new `docs/API.md` lists every HTTP endpoint with
+  request/response shape, used for both human reference and a starting point
+  for any future SDK or integration.
+- **User test plan** — `docs/TEST_PLAN.md` covers the smoke tests for every
+  release path, indexed for quick scan-down execution.
+
+### Changed (internal — no user-visible behaviour change)
+
+- **Capped HTML read during indexing** — `build_index()` now reads at most 64 KB
+  per note (was unbounded). Title and `<meta name="modified">` are always within
+  the first 1 KB; snippet caps at 280 chars; search index caps at 8 KB of body
+  text. Peak indexing memory on a 1,800-note library with several 5 MB image
+  notes drops from ~250 MB to ~40 MB transient.
+- **Search corpus trimmed** — the per-note `_search` field is now derived from
+  the capped body (≤ 8 KB) instead of the full body text. Resident memory after
+  indexing drops by ~40% on real libraries with no measurable search-quality
+  loss (substring matches concentrate near the top of notes).
+- **Client index cached by version** — `/api/index-status` returns
+  `index_version` (incremented on every `_rebuild()`). The client skips the
+  `/api/notes` fetch when version is unchanged and the folder hasn't changed —
+  eliminating 600 KB–1.5 MB JSON round-trips on every folder click.
+- **De-duplicated `removeStaleFile` / `removeStalNote`** — collapsed into a
+  single `removeNoteFromReport()` helper shared by both Sync Report cards.
+- **De-duplicated "Deleted from Apple Notes" and "Stale HTML files" cards** —
+  factored into `renderRemovableFileCard(label, intro, items)`. ~200 lines of
+  duplicate template code removed.
+- **`fmtSize`/`fmtBytes`/`_fmt_size` consolidated** — single `fmtSize()` helper
+  on the client, single `_fmt_size()` on the server, with consistent precision
+  rules (`X.Y MB` / `X KB` / `X B`).
+- **Sync polling extracted** — `runSync()` was 130 lines mixing 5 phases. Now
+  orchestrates four smaller phase helpers (`postSync`, `pollExportPhase`,
+  `pollReindexPhase`, `pollFinalLogPhase`) via a shared `pollUntil()` utility.
+- **Magic numbers named** — `_MAX_REFERENCED_HTML_SIZE`, `_GATE_THRESHOLD`,
+  `_PREFIX_DETECT_THRESHOLD`, `_EXPORT_TIMEOUT_SEC`, `_LIVE_LINES_MAX`,
+  `_LIVE_LINES_KEEP` replace inline numeric literals throughout `server.py`.
+
+### Fixed
+
+- **POST `/api/sync` race window** — the `active` check-then-set is now atomic
+  inside one `with _lock` block. Two near-simultaneous clicks can no longer both
+  pass the guard and start parallel exports.
+- **`_wait_for_reindex()` infinite loop on stuck index** — added a 10-minute
+  cap. If the index doesn't complete in that window, the wait thread exits and
+  the partial log is marked complete with a warning, instead of leaking forever.
+- **`fmtSize(0)` no longer renders "0 B"** — empty notes show a blank size badge
+  instead of a literal zero.
+- **Modal focus management** — opening About or Sync Report now moves keyboard
+  focus into the modal; PDF preview remains keyboard-closeable via Escape.
+
+### Documentation
+
+- **CLAUDE.md split** — gotchas-only summary (≤ 120 lines) stays at
+  `CLAUDE.md` per global guidance; deeper architectural notes moved into
+  `docs/ARCHITECTURE.md`. Cross-linked.
+- **Drift corrections** — `live_lines` "last 50" → "last 200"; "five server-side
+  guards" → "six"; drift banner copy refers to the button rather than the
+  command line; "Never do" list adds the empty-`<h1>` image guard.
+- **README features list** — adds the Sync Log button and Force Full Re-export
+  sidebar entry (both shipped in v2.6 but missing from the feature list).
+- **Pre-merge documentation accuracy pass** — clarifies the capped search corpus,
+  setup commands, `sync.sh` filename-scheme limitation, API response wording,
+  and focus-management limitations; marks the old exporter-integration plan as
+  archived historical context.
+
+---
+
 ## [2.7.0] 22-05-2026
+
+> Note: the v2.6.0 work was developed on `dev` and folded into the v2.7.0
+> release section below instead of being released as a separate dated changelog
+> entry.
 
 ### Fixed
 

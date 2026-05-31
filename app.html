@@ -111,6 +111,17 @@
       gap: 5px;
       cursor: pointer;
       user-select: none;
+      /* Reset native <button> defaults so this looks identical to the prior div */
+      background: none;
+      border: none;
+      padding: 0;
+      font: inherit;
+      color: inherit;
+    }
+    .toggle-wrap:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+      border-radius: 14px;
     }
     .toggle-emoji { font-size: 13px; }
     .toggle-track {
@@ -439,6 +450,7 @@
       border: 1px solid var(--border);
       font-size: 13px;
       font-weight: 500;
+      font-family: inherit;
       color: var(--tx-secondary);
       cursor: pointer;
       transition: background var(--trans), border-color var(--trans), color var(--trans);
@@ -446,6 +458,7 @@
       white-space: nowrap;
       line-height: 1.3;
     }
+    .filter-pill:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .filter-pill:hover {
       background: var(--bg-hover);
       border-color: var(--accent);
@@ -1557,12 +1570,14 @@
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
           </svg>
         </button>
-        <div class="toggle-wrap" id="themeToggleWrap" title="Toggle dark mode">
-          <span class="toggle-emoji" id="themeEmoji">☀️</span>
-          <div class="toggle-track" id="themeTrack">
+        <button class="toggle-wrap" id="themeToggleWrap" type="button"
+                aria-pressed="false" aria-label="Toggle dark mode"
+                title="Toggle dark mode">
+          <span class="toggle-emoji" id="themeEmoji" aria-hidden="true">☀️</span>
+          <div class="toggle-track" id="themeTrack" aria-hidden="true">
             <div class="toggle-thumb"></div>
           </div>
-        </div>
+        </button>
       </div>
     </div>
 
@@ -1618,14 +1633,17 @@
         <div class="search-x" id="searchClear">✕</div>
       </div>
       <div class="search-all-row" id="searchAllRow">
-        <button class="search-all-pill" id="searchAllPill" title="Search across all folders">
-          <span class="search-all-dot"></span>Search all notes
+        <button class="search-all-pill" id="searchAllPill" type="button"
+                aria-pressed="false" title="Search across all folders">
+          <span class="search-all-dot" aria-hidden="true"></span>Search all notes
         </button>
       </div>
     </div>
     <div class="list-meta-row">
       <div class="list-meta" id="listMeta"></div>
-      <button class="sort-toggle" id="sortToggle" title="Sort by date or file size">↓ Date</button>
+      <button class="sort-toggle" id="sortToggle" type="button"
+              aria-pressed="false" aria-label="Sort by date or file size"
+              title="Sort by date or file size">↓ Date</button>
     </div>
     <div class="note-list" id="noteList">
       <div class="loading-wrap"><div class="spinner"></div>Loading…</div>
@@ -1666,8 +1684,8 @@
   <div class="about-modal" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
     <button class="about-close" id="aboutClose" title="Close">✕</button>
 
-    <div class="about-title" id="aboutTitle">Apple Notes Viewer</div>
-    <div class="about-version" id="aboutVersion">v2.7.0 — Local web viewer for Apple Notes exports</div>
+    <div class="about-title" id="aboutTitle" tabindex="-1">Apple Notes Viewer</div>
+    <div class="about-version" id="aboutVersion">v3.0.0 — Local web viewer for Apple Notes exports</div>
 
     <p class="about-desc">
       A zero-dependency local web app for browsing and searching your Apple Notes.
@@ -1678,7 +1696,7 @@
 
     <div class="about-section">How to use</div>
     <p class="about-desc" style="margin-bottom:0">
-      1. Install <em>apple-notes-exporter</em> (see credit below) and run an initial export with <code style="font-size:12px;background:var(--bg-search);padding:1px 5px;border-radius:4px;">--format html</code>.<br>
+      1. Install <em>apple-notes-exporter</em> (see credit below) and run an initial export with <code style="font-size:12px;background:var(--bg-search);padding:1px 5px;border-radius:4px;">notes-export export --format html --incremental --output &lt;folder&gt;</code>.<br>
       2. Launch via <strong>Launch Notes.command</strong> or <code style="font-size:12px;background:var(--bg-search);padding:1px 5px;border-radius:4px;">python3 server.py</code> in Terminal.<br>
       3. On first run, click the gear icon (Settings) in the sidebar header to select your export folder.<br>
       4. Press <strong>Sync</strong> in the sidebar footer to pull in new and changed notes. Use <strong>Full Re-export</strong> when notes have moved to Recently Deleted or after major changes — it wipes the watermark and re-exports every note (takes longer).
@@ -1691,11 +1709,11 @@
 
     <div class="about-section">Built by Anthony Clarke</div>
     <div class="about-links">
-      <a href="https://github.com/anthonyjclarke/apple-notes-viewer" target="_blank" rel="noopener">
+      <a href="https://github.com/anthonyjclarke/AppleNotes-Viewer" target="_blank" rel="noopener">
         <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
           <path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.11.79-.25.79-.55v-2.1c-3.2.7-3.88-1.36-3.88-1.36-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.7.08-.7 1.17.08 1.78 1.2 1.78 1.2 1.04 1.78 2.72 1.27 3.38.97.1-.75.41-1.27.74-1.56-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.19 1.18a11.07 11.07 0 0 1 5.81 0c2.22-1.5 3.19-1.18 3.19-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.69 5.39-5.25 5.68.42.36.8 1.08.8 2.18v3.23c0 .3.21.66.79.55A11.5 11.5 0 0 0 12 .5z"/>
         </svg>
-        github.com/anthonyjclarke/apple-notes-viewer
+        github.com/anthonyjclarke/AppleNotes-Viewer
       </a>
       <a href="https://bsky.app/profile/anthonyjclarke.bsky.social" target="_blank" rel="noopener">
         <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -1739,7 +1757,7 @@
     <!-- ── Live section — shown while sync is running ── -->
     <div id="syncLogLiveSection">
       <div class="synclog-title-row">
-        <div class="about-title" id="syncLogLiveTitle">Sync Report</div>
+        <div class="about-title" id="syncLogLiveTitle" tabindex="-1">Sync Report</div>
         <span class="synclog-badge live" id="syncLogBadge">● Live</span>
       </div>
       <div class="synclog-meta" id="syncLogLiveMeta">—</div>
@@ -1784,8 +1802,15 @@ let searchTimer   = null;
 let searchQ       = "";
 let searchAll     = false;
 let currentTag    = null;   // active tag filter, e.g. "#GPS"
-let sortMode      = "date"; // "date" (newest first) | "size" (largest first)
-let attachFilter  = false;  // when true, show only notes with an (Attachments)/ folder
+// sortMode and attachFilter persist across reloads via localStorage so the user's
+// last-used view is restored. Default to date/no-filter on first run.
+let sortMode      = localStorage.getItem("notes-sort") === "size" ? "size" : "date";
+let attachFilter  = localStorage.getItem("notes-attach-filter") === "1";
+
+// Client-side index cache. /api/notes is bypassed when the (folder, index_version)
+// tuple matches the last fetch — avoids hundreds of KB of redundant JSON per click.
+let cachedIndexVersion = null;
+let cachedFolder       = null;
 
 /* ── Theme ──────────────────────────────────────────────────────────── */
 const html      = document.documentElement;
@@ -1796,6 +1821,7 @@ function setTheme(dark) {
   html.setAttribute("data-theme", dark ? "dark" : "light");
   themeTrack.classList.toggle("on", dark);
   themeEmoji.textContent = dark ? "🌙" : "☀️";
+  document.getElementById("themeToggleWrap").setAttribute("aria-pressed", dark ? "true" : "false");
   localStorage.setItem("notes-theme", dark ? "dark" : "light");
 }
 
@@ -1838,9 +1864,13 @@ function fmtFull(dateStr) {
   });
 }
 
-/* ── Size formatting ────────────────────────────────────────────────── */
+/* ── Size formatting ──────────────────────────────────────────────────
+ * Single shared formatter used everywhere on the client. Returns "" for 0
+ * so empty-note badges don't read "0 B" — matches the server-side _fmt_size()
+ * precision rules (1 decimal for MB, integer KB, raw bytes).
+ * --------------------------------------------------------------------- */
 function fmtSize(b) {
-  if (!b) return "0 B";
+  if (!b) return "";   // suppress "0 B" badges on empty notes
   if (b >= 1048576) return (b / 1048576).toFixed(1) + " MB";
   if (b >= 1024)    return Math.round(b / 1024) + " KB";
   return b + " B";
@@ -1947,14 +1977,16 @@ async function loadTags() {
   const container = document.getElementById("folderList");
 
   // ── Filters section — always rendered ────────────────────────────────
-  const attActive = attachFilter ? " active" : "";
+  const attActive  = attachFilter ? " active" : "";
+  const attPressed = attachFilter ? "true" : "false";
   let html = `<div class="sidebar-divider"></div>
     <div class="folder-section-label">Filters</div>
     <div class="filter-grid">
-      <div class="filter-pill${attActive}" id="attachFilterPill">
+      <button class="filter-pill${attActive}" id="attachFilterPill" type="button"
+              role="switch" aria-pressed="${attPressed}" aria-label="Has Attachments filter">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
         Has Attachments
-      </div>
+      </button>
     </div>`;
 
   // ── Tags section — only when tags exist ──────────────────────────────
@@ -1977,7 +2009,10 @@ async function loadTags() {
   // ── Attachment filter pill click handler ─────────────────────────────
   document.getElementById("attachFilterPill").addEventListener("click", () => {
     attachFilter = !attachFilter;
-    document.getElementById("attachFilterPill").classList.toggle("active", attachFilter);
+    localStorage.setItem("notes-attach-filter", attachFilter ? "1" : "0");
+    const pill = document.getElementById("attachFilterPill");
+    pill.classList.toggle("active", attachFilter);
+    pill.setAttribute("aria-pressed", attachFilter ? "true" : "false");
     applyFiltersAndSort();
     renderList();
   });
@@ -2024,6 +2059,7 @@ function updateSearchAllPill() {
   const folderScoped = currentFolder !== "__all__" && !currentTag;
   row.classList.toggle("visible", folderScoped);
   pill.classList.toggle("active", searchAll);
+  pill.setAttribute("aria-pressed", searchAll ? "true" : "false");
 }
 
 document.getElementById("searchAllPill").addEventListener("click", () => {
@@ -2032,12 +2068,20 @@ document.getElementById("searchAllPill").addEventListener("click", () => {
   loadNoteList();
 });
 
-/* ── Sort toggle ────────────────────────────────────────────────────── */
-document.getElementById("sortToggle").addEventListener("click", () => {
-  sortMode = sortMode === "date" ? "size" : "date";
+/* ── Sort toggle ──────────────────────────────────────────────────────
+ * Persists across reloads via localStorage. Initial UI state is set in
+ * init() once the DOM is fully populated.
+ * --------------------------------------------------------------------- */
+function applySortToggleUi() {
   const btn = document.getElementById("sortToggle");
   btn.textContent = sortMode === "size" ? "↓ Size" : "↓ Date";
   btn.classList.toggle("active", sortMode === "size");
+  btn.setAttribute("aria-pressed", sortMode === "size" ? "true" : "false");
+}
+document.getElementById("sortToggle").addEventListener("click", () => {
+  sortMode = sortMode === "date" ? "size" : "date";
+  localStorage.setItem("notes-sort", sortMode);
+  applySortToggleUi();
   applyFiltersAndSort();
   renderList();
 });
@@ -2053,9 +2097,36 @@ async function loadNoteList() {
     ? "__all__"
     : currentFolder;
 
-  const url = searchQ.length >= 2
+  const isSearch = searchQ.length >= 2;
+  const url      = isSearch
     ? `/api/search?q=${encodeURIComponent(searchQ)}&folder=${encodeURIComponent(folder)}`
     : `/api/notes?folder=${encodeURIComponent(currentFolder)}`;
+
+  // ── Cache short-circuit ─────────────────────────────────────────────
+  // For plain folder browses (no search), skip the network fetch when both the
+  // server's index_version AND the folder are unchanged since the last fetch.
+  // Eliminates the 600 KB–1.5 MB JSON round-trip per folder click on large
+  // libraries. Search results always refetch (query is the cache-buster).
+  if (!isSearch) {
+    try {
+      const status = await fetch("/api/index-status").then(r => r.json());
+      const v      = status.index_version;
+      if (v != null
+          && v === cachedIndexVersion
+          && currentFolder === cachedFolder
+          && allNotes.length > 0) {
+        applyFiltersAndSort();
+        renderList();
+        return;
+      }
+      cachedIndexVersion = v;
+      cachedFolder       = currentFolder;
+    } catch { /* fall through to fetch */ }
+  } else {
+    // Search results invalidate the cache so the next folder browse refetches.
+    cachedIndexVersion = null;
+    cachedFolder       = null;
+  }
 
   const resp = await fetch(url);
   allNotes   = await resp.json();
@@ -2608,8 +2679,17 @@ document.getElementById("settingsBtn").addEventListener("click", () => {
 /* ── About modal ────────────────────────────────────────────────────── */
 (function () {
   const overlay = document.getElementById("aboutOverlay");
-  const open  = () => overlay.classList.add("open");
-  const close = () => overlay.classList.remove("open");
+  let _lastFocus = null;
+  const open  = () => {
+    _lastFocus = document.activeElement;
+    overlay.classList.add("open");
+    // Move keyboard focus into the modal for screen readers / keyboard users
+    setTimeout(() => document.getElementById("aboutTitle").focus(), 0);
+  };
+  const close = () => {
+    overlay.classList.remove("open");
+    if (_lastFocus && _lastFocus.focus) _lastFocus.focus();
+  };
 
   document.getElementById("infoBtn").addEventListener("click", open);
   document.getElementById("aboutClose").addEventListener("click", close);
@@ -2642,11 +2722,10 @@ document.getElementById("settingsBtn").addEventListener("click", () => {
     if (s < 60)      return s + "s";
     return Math.floor(s / 60) + "m " + (s % 60) + "s";
   }
-  function fmtBytes(b) {
-    if (b >= 1048576) return (b / 1048576).toFixed(1) + " MB";
-    if (b >= 1024)    return Math.round(b / 1024) + " KB";
-    return b + " B";
-  }
+  // Byte formatter — defer to the single top-level fmtSize() helper. fmtSize
+  // returns "" for zero (used by the note-list badge); the sync report wants
+  // a literal "0 B" so we restore it here, otherwise the helper is identical.
+  const fmtBytes = b => (b ? fmtSize(b) : "0 B");
   function fmtDate(iso) {
     try {
       return new Date(iso).toLocaleString("en-AU", {
@@ -2664,12 +2743,36 @@ document.getElementById("settingsBtn").addEventListener("click", () => {
   }
   function resetBar() { barFill.classList.remove("indet"); barFill.style.width = "0%"; }
 
+  // ── Inactivity escape hatch ──────────────────────────────────────
+  // If the live output stops changing for INACTIVITY_FORCE_CLOSE_MS, re-enable
+  // the × so the user can dismiss the modal — covers a hung subprocess that
+  // the 5-minute server-side timeout would otherwise leave them watching.
+  const INACTIVITY_FORCE_CLOSE_MS = 60_000;
+  let _lastLiveSig    = null;
+  let _lastLiveChange = 0;
+  let _inactivityIv   = null;
+  function _stopInactivityWatch() {
+    if (_inactivityIv) { clearInterval(_inactivityIv); _inactivityIv = null; }
+  }
+  function _startInactivityWatch() {
+    _stopInactivityWatch();
+    _lastLiveSig    = null;
+    _lastLiveChange = Date.now();
+    _inactivityIv   = setInterval(() => {
+      if (Date.now() - _lastLiveChange > INACTIVITY_FORCE_CLOSE_MS) {
+        closeBtn.classList.remove("synclog-close-disabled");
+        closeBtn.title = "Sync appears stuck — click to dismiss";
+      }
+    }, 5_000);
+  }
+
   // ── Live mode — opens when sync starts ───────────────────────────
   function openLive(metaText) {
     liveSection.hidden  = false;
     reportSec.hidden    = true;
     doneRow.hidden      = true;
     closeBtn.classList.add("synclog-close-disabled");
+    closeBtn.title      = "Close (disabled while syncing)";
     badge.className     = "synclog-badge live";
     badge.textContent   = "● Live";
     liveTitle.textContent = "Syncing…";
@@ -2680,6 +2783,9 @@ document.getElementById("settingsBtn").addEventListener("click", () => {
     livePre.classList.remove("review");   // back to live streaming mode
     resetBar(); setBar(null);
     overlay.classList.add("open");
+    _startInactivityWatch();
+    // Move focus into the modal for screen-reader / keyboard users
+    setTimeout(() => liveTitle.focus && liveTitle.focus(), 0);
   }
 
   // Update live view on each poll tick
@@ -2688,6 +2794,13 @@ document.getElementById("settingsBtn").addEventListener("click", () => {
     if (liveLines && liveLines.length) {
       livePre.textContent = liveLines.join("\n");
       livePre.scrollTop   = livePre.scrollHeight;
+      // Inactivity tracking — signature = line count + last line. Any change
+      // resets the deadline.
+      const sig = liveLines.length + "|" + (liveLines[liveLines.length - 1] || "");
+      if (sig !== _lastLiveSig) {
+        _lastLiveSig    = sig;
+        _lastLiveChange = Date.now();
+      }
     }
     const cur = p.current || "";
     if (cur.startsWith("Existing notes")) {
@@ -2798,120 +2911,133 @@ document.getElementById("settingsBtn").addEventListener("click", () => {
     addPhase("ok", "✓", "Re-index", fmtDur(ri.duration_s || 0),
       `${(ri.notes_indexed || 0).toLocaleString()} note${ri.notes_indexed !== 1 ? "s" : ""} indexed`);
 
-    // ── Deleted-notes card ────────────────────────────────────────────────
-    // The exporter emits "Deleted (no longer in Notes): <path>" in verbose mode for
-    // notes that were previously exported but have since been removed from Apple Notes.
-    // It updates the watermark but leaves the HTML file on disk. We parse these lines
-    // and surface them here so the user can remove the stale files with one click.
-    const deletedNotes = (log.export || {}).deleted_notes || [];
-    if (deletedNotes.length > 0) {
-      const dn = deletedNotes.length;
-      let dnDetail = `
-        <div class="synclog-deleted-intro">
-          The exporter identified ${dn} note${dn !== 1 ? "s" : ""} that
-          ${dn !== 1 ? "have" : "has"} been deleted from Apple Notes.
-          The HTML file${dn !== 1 ? "s" : ""} still exist${dn !== 1 ? "" : "s"} in the
-          export folder — click <strong>Remove</strong> to delete each one from disk,
-          or <strong>Remove all</strong> to clean up in one step.
-        </div>
-        <div class="synclog-file-table synclog-deleted-table" id="synclogDeletedTable">
+    // ── Removable-file card helpers ───────────────────────────────────────
+    // Shared between "Deleted from Apple Notes" and "Stale HTML files" — both
+    // render the same DOM (intro + table + per-row Remove + bulk Remove-all)
+    // and call POST /api/note/delete with identical client-side bookkeeping.
+
+    // Remove one note via the server, update the row UI, prune client arrays.
+    // Returns true on success (including "not found on disk" — already gone).
+    async function removeNoteFromReport(filePath, rowEl, btnEl) {
+      btnEl.disabled    = true;
+      btnEl.textContent = "Removing…";
+      try {
+        const r = await fetch("/api/note/delete", {
+          method:  "POST",
+          headers: {"Content-Type": "application/json"},
+          body:    JSON.stringify({file: filePath}),
+        });
+        const d = await r.json();
+        // "File not found on disk" means already gone — still counts as success.
+        if (d.ok || (d.error || "").toLowerCase().includes("not found")) {
+          rowEl.classList.add("synclog-deleted-row-done");
+          btnEl.textContent = "✓ Removed";
+          // Keep client arrays in sync so the list never shows a ghost entry.
+          allNotes   = allNotes.filter(n => n.file !== filePath);
+          shownNotes = shownNotes.filter(n => n.file !== filePath);
+          if (selectedFile === filePath) {
+            selectedFile = null;
+            renderList();
+          }
+          return true;
+        }
+        btnEl.disabled    = false;
+        btnEl.textContent = "Remove";
+        btnEl.title       = d.error || "Unknown error";
+        return false;
+      } catch (e) {
+        btnEl.disabled    = false;
+        btnEl.textContent = "Remove";
+        btnEl.title       = e.message;
+        return false;
+      }
+    }
+
+    // Build a "removable file" phase card. items is an array of either:
+    //   string                                 (path only — title is derived)
+    //   {path: string, title: string, size?:n} (richer row data)
+    // label/intro are card-specific text. Wires per-row + bulk Remove handlers.
+    function renderRemovableFileCard(label, intro, items) {
+      const n = items.length;
+      const norm = items.map(it =>
+        typeof it === "string"
+          ? { path: it, title: it.replace(/\.html$/i, "").split("/").pop().replace(/^\d{4}-\d{2}-\d{2} /, "") }
+          : it
+      );
+      let detail = `
+        <div class="synclog-deleted-intro">${intro}</div>
+        <div class="synclog-file-table synclog-deleted-table">
           <div class="synclog-file-hd"><span>Note</span><span>Path</span><span></span></div>`;
-      deletedNotes.forEach((filePath, i) => {
-        const stem  = filePath.replace(/\.html$/i, "").split("/").pop() || filePath;
-        const title = stem.replace(/^\d{4}-\d{2}-\d{2} /, "");
-        dnDetail += `
-          <div class="synclog-file-row" id="dn-row-${i}" data-file="${esc(filePath)}">
-            <span title="${esc(title)}">${esc(title)}</span>
-            <span title="${esc(filePath)}" style="font-family:'SF Mono',Menlo,monospace;font-size:10.5px;">${esc(filePath)}</span>
-            <span><button class="synclog-del-btn" data-idx="${i}">Remove</button></span>
+      norm.forEach((it, i) => {
+        detail += `
+          <div class="synclog-file-row" data-file="${esc(it.path)}">
+            <span title="${esc(it.title)}">${esc(it.title)}</span>
+            <span title="${esc(it.path)}" style="font-family:'SF Mono',Menlo,monospace;font-size:10.5px;">${esc(it.path)}</span>
+            <span><button class="synclog-del-btn" type="button" data-idx="${i}">Remove</button></span>
           </div>`;
       });
-      dnDetail += `</div>
+      detail += `</div>
         <div class="synclog-deleted-footer">
-          <button class="synclog-del-all-btn" id="synclogDelAllBtn">Remove all ${dn}</button>
+          <button class="synclog-del-all-btn" type="button">Remove all ${n}</button>
         </div>`;
 
-      const dnCard = document.createElement("div");
-      dnCard.className = "synclog-phase";
-      dnCard.innerHTML = `
+      const card = document.createElement("div");
+      card.className = "synclog-phase";
+      card.innerHTML = `
         <div class="synclog-phase-head">
-          <span class="synclog-icon warn">⚠</span>
-          <span class="synclog-phase-label">Deleted from Apple Notes</span>
-          <span class="synclog-phase-dur">${dn} file${dn !== 1 ? "s" : ""}</span>
+          <span class="synclog-icon warn" aria-hidden="true">⚠</span>
+          <span class="synclog-phase-label">${esc(label)}</span>
+          <span class="synclog-phase-dur">${n} file${n !== 1 ? "s" : ""}</span>
         </div>
-        <div class="synclog-phase-detail">${dnDetail}</div>`;
-      body.appendChild(dnCard);
+        <div class="synclog-phase-detail">${detail}</div>`;
+      body.appendChild(card);
 
-      // Helper: remove one stale note file via the server, update the row UI.
-      // Returns true if the file was removed (or already gone).
-      async function removeStalNote(filePath, rowEl, btnEl) {
-        btnEl.disabled    = true;
-        btnEl.textContent = "Removing…";
-        try {
-          const r = await fetch("/api/note/delete", {
-            method:  "POST",
-            headers: {"Content-Type": "application/json"},
-            body:    JSON.stringify({file: filePath}),
-          });
-          const d = await r.json();
-          // "File not found on disk" means already gone — still counts as success.
-          if (d.ok || (d.error || "").toLowerCase().includes("not found")) {
-            rowEl.classList.add("synclog-deleted-row-done");
-            btnEl.textContent = "✓ Removed";
-            // Keep client note arrays in sync so the list doesn't show a ghost entry.
-            allNotes   = allNotes.filter(n => n.file !== filePath);
-            shownNotes = shownNotes.filter(n => n.file !== filePath);
-            if (selectedFile === filePath) {
-              selectedFile = null;
-              renderList();
-            }
-            return true;
-          } else {
-            btnEl.disabled    = false;
-            btnEl.textContent = "Remove";
-            btnEl.title       = d.error || "Unknown error";
-            return false;
-          }
-        } catch (e) {
-          btnEl.disabled    = false;
-          btnEl.textContent = "Remove";
-          btnEl.title       = e.message;
-          return false;
-        }
-      }
-
-      // Wire individual Remove buttons
-      dnCard.querySelectorAll(".synclog-del-btn").forEach((btn, i) => {
+      // Per-row Remove buttons
+      card.querySelectorAll(".synclog-del-btn").forEach((btn, i) => {
         btn.addEventListener("click", async () => {
-          const rowEl   = btn.closest(".synclog-file-row");
-          const filePath = rowEl ? rowEl.dataset.file : deletedNotes[i];
+          const rowEl    = btn.closest(".synclog-file-row");
+          const filePath = rowEl ? rowEl.dataset.file : norm[i].path;
           if (!filePath) return;
-          const removed = await removeStalNote(filePath, rowEl, btn);
+          const removed = await removeNoteFromReport(filePath, rowEl, btn);
           if (removed) loadFolders().then(loadTags);
         });
       });
-
-      // Wire "Remove all" button — iterates pending rows sequentially
-      const delAllBtn = dnCard.querySelector("#synclogDelAllBtn");
-      if (delAllBtn) {
-        delAllBtn.addEventListener("click", async () => {
-          delAllBtn.disabled    = true;
-          delAllBtn.textContent = "Removing…";
-          let anyRemoved = false;
-          const rows = dnCard.querySelectorAll(
-            ".synclog-file-row:not(.synclog-deleted-row-done)");
-          for (const row of rows) {
-            const btn      = row.querySelector(".synclog-del-btn");
-            const filePath = row.dataset.file;
-            if (btn && filePath) {
-              const removed = await removeStalNote(filePath, row, btn);
-              if (removed) anyRemoved = true;
-            }
+      // Bulk Remove-all
+      const allBtn = card.querySelector(".synclog-del-all-btn");
+      allBtn.addEventListener("click", async () => {
+        allBtn.disabled    = true;
+        allBtn.textContent = "Removing…";
+        let anyRemoved = false;
+        const rows = card.querySelectorAll(
+          ".synclog-file-row:not(.synclog-deleted-row-done)");
+        for (const row of rows) {
+          const btn      = row.querySelector(".synclog-del-btn");
+          const filePath = row.dataset.file;
+          if (btn && filePath) {
+            const removed = await removeNoteFromReport(filePath, row, btn);
+            if (removed) anyRemoved = true;
           }
-          delAllBtn.textContent = "All removed";
-          if (anyRemoved) loadFolders().then(loadTags);
-        });
-      }
+        }
+        allBtn.textContent = "All removed";
+        if (anyRemoved) loadFolders().then(loadTags);
+      });
+    }
+
+    // ── Deleted-notes card ────────────────────────────────────────────────
+    // The exporter emits "Deleted (no longer in Notes): <path>" in verbose mode
+    // for notes previously exported but since removed from Apple Notes. It
+    // updates the watermark but leaves the HTML on disk; we surface the list
+    // here for one-click removal.
+    const deletedNotes = (log.export || {}).deleted_notes || [];
+    if (deletedNotes.length > 0) {
+      const dn = deletedNotes.length;
+      const intro =
+        `The exporter identified ${dn} note${dn !== 1 ? "s" : ""} that ` +
+        `${dn !== 1 ? "have" : "has"} been deleted from Apple Notes. ` +
+        `The HTML file${dn !== 1 ? "s" : ""} still exist${dn !== 1 ? "" : "s"} ` +
+        `in the export folder — click <strong>Remove</strong> to delete each one ` +
+        `from disk, or <strong>Remove all</strong> to clean up in one step.`;
+      renderRemovableFileCard("Deleted from Apple Notes", intro, deletedNotes);
     }
 
     // ── Drift warning banner ──────────────────────────────────────────────
@@ -2942,115 +3068,23 @@ document.getElementById("settingsBtn").addEventListener("click", () => {
     }
 
     // ── Stale-files card (reset_sync runs only) ───────────────────────────
-    // After --reset-sync, the watermark is fresh and contains only entries for
-    // notes currently in Apple Notes. Any HTML file on disk not in the new
-    // watermark is stale — either a permanently-deleted note's surviving HTML
-    // or the old copy of a note that moved to a different folder (e.g. into
-    // Recently Deleted). Each row has an individual Remove button and the
-    // card has a Remove-all bulk action.
+    // After --reset-sync, the fresh watermark contains only entries for notes
+    // currently in Apple Notes. Any HTML file on disk not in the new watermark
+    // is stale — either a permanently-deleted note's surviving HTML, or the
+    // old copy of a note that moved to a different folder (e.g. into Recently
+    // Deleted). Each item already carries {path, title, size}.
     const staleFiles = log.stale_files || [];
     if (staleFiles.length > 0) {
       const sf = staleFiles.length;
-      let sfDetail = `
-        <div class="synclog-deleted-intro">
-          The fresh watermark from <strong>--reset-sync</strong> identified
-          ${sf} HTML file${sf !== 1 ? "s" : ""} on disk that
-          ${sf !== 1 ? "are no longer linked" : "is no longer linked"} to any current note in Apple Notes.
-          These are either notes that have been permanently deleted, or old
-          copies left behind when a note moved between folders (e.g. into Recently Deleted).
-          Removing them brings the export folder fully in sync with Apple Notes.
-        </div>
-        <div class="synclog-file-table synclog-deleted-table" id="synclogStaleTable">
-          <div class="synclog-file-hd"><span>Note</span><span>Path</span><span></span></div>`;
-      staleFiles.forEach((item, i) => {
-        sfDetail += `
-          <div class="synclog-file-row" id="sf-row-${i}" data-file="${esc(item.path)}">
-            <span title="${esc(item.title)}">${esc(item.title)}</span>
-            <span title="${esc(item.path)}" style="font-family:'SF Mono',Menlo,monospace;font-size:10.5px;">${esc(item.path)}</span>
-            <span><button class="synclog-del-btn" data-idx="${i}">Remove</button></span>
-          </div>`;
-      });
-      sfDetail += `</div>
-        <div class="synclog-deleted-footer">
-          <button class="synclog-del-all-btn" id="synclogStaleAllBtn">Remove all ${sf}</button>
-        </div>`;
-
-      const sfCard = document.createElement("div");
-      sfCard.className = "synclog-phase";
-      sfCard.innerHTML = `
-        <div class="synclog-phase-head">
-          <span class="synclog-icon warn">⚠</span>
-          <span class="synclog-phase-label">Stale HTML files on disk</span>
-          <span class="synclog-phase-dur">${sf} file${sf !== 1 ? "s" : ""}</span>
-        </div>
-        <div class="synclog-phase-detail">${sfDetail}</div>`;
-      body.appendChild(sfCard);
-
-      // Same removal helper pattern as deletedNotes card above.
-      async function removeStaleFile(filePath, rowEl, btnEl) {
-        btnEl.disabled    = true;
-        btnEl.textContent = "Removing…";
-        try {
-          const r = await fetch("/api/note/delete", {
-            method:  "POST",
-            headers: {"Content-Type": "application/json"},
-            body:    JSON.stringify({file: filePath}),
-          });
-          const d = await r.json();
-          if (d.ok || (d.error || "").toLowerCase().includes("not found")) {
-            rowEl.classList.add("synclog-deleted-row-done");
-            btnEl.textContent = "✓ Removed";
-            allNotes   = allNotes.filter(n => n.file !== filePath);
-            shownNotes = shownNotes.filter(n => n.file !== filePath);
-            if (selectedFile === filePath) {
-              selectedFile = null;
-              renderList();
-            }
-            return true;
-          } else {
-            btnEl.disabled    = false;
-            btnEl.textContent = "Remove";
-            btnEl.title       = d.error || "Unknown error";
-            return false;
-          }
-        } catch (e) {
-          btnEl.disabled    = false;
-          btnEl.textContent = "Remove";
-          btnEl.title       = e.message;
-          return false;
-        }
-      }
-
-      sfCard.querySelectorAll(".synclog-del-btn").forEach((btn, i) => {
-        btn.addEventListener("click", async () => {
-          const rowEl    = btn.closest(".synclog-file-row");
-          const filePath = rowEl ? rowEl.dataset.file : staleFiles[i].path;
-          if (!filePath) return;
-          const removed = await removeStaleFile(filePath, rowEl, btn);
-          if (removed) loadFolders().then(loadTags);
-        });
-      });
-
-      const sfAllBtn = sfCard.querySelector("#synclogStaleAllBtn");
-      if (sfAllBtn) {
-        sfAllBtn.addEventListener("click", async () => {
-          sfAllBtn.disabled    = true;
-          sfAllBtn.textContent = "Removing…";
-          let anyRemoved = false;
-          const rows = sfCard.querySelectorAll(
-            ".synclog-file-row:not(.synclog-deleted-row-done)");
-          for (const row of rows) {
-            const btn      = row.querySelector(".synclog-del-btn");
-            const filePath = row.dataset.file;
-            if (btn && filePath) {
-              const removed = await removeStaleFile(filePath, row, btn);
-              if (removed) anyRemoved = true;
-            }
-          }
-          sfAllBtn.textContent = "All removed";
-          if (anyRemoved) loadFolders().then(loadTags);
-        });
-      }
+      const intro =
+        `The fresh watermark from <strong>--reset-sync</strong> identified ` +
+        `${sf} HTML file${sf !== 1 ? "s" : ""} on disk that ` +
+        `${sf !== 1 ? "are no longer linked" : "is no longer linked"} to any ` +
+        `current note in Apple Notes. These are either notes that have been ` +
+        `permanently deleted, or old copies left behind when a note moved ` +
+        `between folders (e.g. into Recently Deleted). Removing them brings ` +
+        `the export folder fully in sync with Apple Notes.`;
+      renderRemovableFileCard("Stale HTML files on disk", intro, staleFiles);
     }
 
     // Total
@@ -3078,10 +3112,12 @@ document.getElementById("settingsBtn").addEventListener("click", () => {
   // keepLive=true → live log stays visible above the phase cards (sequential view).
   // keepLive=false → live section hidden; collapsible raw output shown in report.
   function showReport(log, keepLive = false) {
+    _stopInactivityWatch();
     badge.className       = "synclog-badge done";
     badge.textContent     = "✓ Done";
     liveTitle.textContent = "Sync Report";
     closeBtn.classList.remove("synclog-close-disabled");
+    closeBtn.title        = "Close";
 
     if (keepLive) {
       // Keep the live section visible as the "history" pane at the top.
@@ -3115,6 +3151,7 @@ document.getElementById("settingsBtn").addEventListener("click", () => {
   }
 
   function showError(msg) {
+    _stopInactivityWatch();
     setBar(null);
     liveTitle.textContent  = "Sync failed";
     liveStatus.textContent = msg;
@@ -3123,6 +3160,7 @@ document.getElementById("settingsBtn").addEventListener("click", () => {
     doneRow.hidden         = false;
     doneBtn.textContent    = "Close";
     closeBtn.classList.remove("synclog-close-disabled");
+    closeBtn.title         = "Close";
   }
 
   // ── Open report from Log button (post-sync re-open) ───────────────
@@ -3204,38 +3242,51 @@ function resetSyncBar() {
   syncBarFill.style.width = "0%";
 }
 
+/* ── Generic poll helper ──────────────────────────────────────────────
+ * Polls `url` every `intervalMs`. On each response calls `onTick(data)`.
+ * Stops and resolves to the final response when `isDone(data)` returns true.
+ * Errors fall back to a slower retry interval. Caller-facing simplification
+ * eliminates the three near-identical poll blocks inside runSync().
+ * --------------------------------------------------------------------- */
+function pollUntil(url, isDone, onTick, intervalMs = 300, retryMs = 500) {
+  return new Promise(resolve => {
+    function tick() {
+      fetch(url).then(r => r.json()).then(d => {
+        if (onTick) onTick(d);
+        if (isDone(d)) resolve(d);
+        else setTimeout(tick, intervalMs);
+      }).catch(() => setTimeout(tick, retryMs));
+    }
+    tick();
+  });
+}
+
 /* ── Sync runner ──────────────────────────────────────────────────────
  * Called by the ↻ Sync button (resetSync=false) and the Force Full Re-export
- * buttons in the drift banner / sidebar (resetSync=true). resetSync passes
- * --reset-sync to the exporter, which deletes the watermark before exporting
- * and forces every note to be re-exported to its current Apple Notes location.
- * This is the only way to correctly re-place notes that moved to Recently
- * Deleted since the last full export — the incremental exporter cannot detect
- * Apple-Notes-internal folder moves.
+ * buttons in the drift banner / sidebar (resetSync=true). Orchestrates four
+ * phases: POST submit → live export poll → re-index poll → final-log poll.
  * --------------------------------------------------------------------- */
 async function runSync(resetSync = false) {
-  const btn    = document.getElementById("syncBtn");
-  const sta    = document.getElementById("syncStatus");
-  const footer = btn.closest(".sync-footer");
-  const logBtn = document.getElementById("syncLogBtn");
-  const ui     = window._syncLog;
+  const btn     = document.getElementById("syncBtn");
+  const sta     = document.getElementById("syncStatus");
+  const footer  = btn.closest(".sync-footer");
+  const logBtn  = document.getElementById("syncLogBtn");
+  const ui      = window._syncLog;
   const doneBtn = document.getElementById("syncLogDoneBtn");
 
-  // Cache the button's original label HTML (icon + span) so we can restore it
-  // after the sync. Using innerHTML preserves the inline SVG icon — setting
-  // textContent would replace the icon with raw "↻ Sync" text and break the layout.
+  // Cache the button's original label so we can restore the SVG-icon-bearing
+  // <span> text after the sync (textContent on the button itself would replace
+  // the inline SVG).
   const btnLabel  = btn.querySelector(".sync-action-label");
   const origLabel = btnLabel ? btnLabel.textContent : "Sync";
 
-  // Close any open Sync Report (e.g. drift banner re-export was triggered from one)
+  // Close any open Sync Report (drift banner re-export may be triggered from one)
   document.getElementById("syncLogOverlay").classList.remove("open");
-
-  // Open modal in live mode immediately — before POST even returns
   ui.openLive(resetSync
     ? "Starting forced full re-export — this will take longer than a normal sync…"
     : "Starting sync…");
 
-  // Minimal footer indicator while modal is the primary UI
+  // Footer indicator while the modal is the primary UI
   btn.disabled = true;
   if (btnLabel) btnLabel.textContent = resetSync ? "Re-exporting…" : "Syncing…";
   sta.textContent = resetSync ? "Full re-export…" : "Syncing…";
@@ -3248,88 +3299,63 @@ async function runSync(resetSync = false) {
     btn.disabled = false;
     if (btnLabel) btnLabel.textContent = origLabel;
   };
+  const failAndClose = (msg) => {
+    resetFooter();
+    sta.textContent = "Sync failed";
+    ui.showError(msg);
+    doneBtn.onclick = () => {
+      document.getElementById("syncLogOverlay").classList.remove("open");
+    };
+  };
 
   try {
+    // ── Phase 0: POST /api/sync ──────────────────────────────────────
     const r = await fetch("/api/sync", {
       method:  "POST",
       headers: {"Content-Type": "application/json"},
       body:    JSON.stringify({reset_sync: resetSync}),
     });
     const d = await r.json();
-
     if (d.status === "error") {
-      resetFooter();
-      sta.textContent = "Sync failed";
-      ui.showError(d.message || "Unknown error");
-      doneBtn.onclick = () => {
-        document.getElementById("syncLogOverlay").classList.remove("open");
-      };
+      failAndClose(d.message || "Unknown error");
       return;
     }
 
-    // ── Phase 1: poll export progress, update modal live ─────────────
-    await new Promise(resolve => {
-      function poll() {
-        fetch("/api/sync").then(r => r.json()).then(d => {
-          const p  = d.sync_progress;
-          const ll = d.live_lines || [];
-          if (p && p.error) {
-            resetFooter();
-            sta.textContent = "Sync failed";
-            ui.showError(p.error);
-            doneBtn.onclick = () => {
-              document.getElementById("syncLogOverlay").classList.remove("open");
-            };
-            resolve(); return;
-          }
-          if (p && p.active) {
-            ui.updateLive(p, ll);
-            setTimeout(poll, 300);
-          } else {
-            resolve();
-          }
-        }).catch(() => setTimeout(poll, 500));
+    // ── Phase 1: poll export progress, stream live output ────────────
+    let exportErr = null;
+    await pollUntil(
+      "/api/sync",
+      d => {
+        const p = d.sync_progress;
+        if (p && p.error) { exportErr = p.error; return true; }
+        return !(p && p.active);
+      },
+      d => {
+        const p = d.sync_progress;
+        if (p && p.active) ui.updateLive(p, d.live_lines || []);
       }
-      poll();
-    });
+    );
+    if (exportErr) { failAndClose(exportErr); return; }
 
     // ── Phase 2: poll re-index progress ──────────────────────────────
-    await new Promise(resolve => {
-      function poll() {
-        fetch("/api/index-status").then(r => r.json()).then(d => {
-          if (d.active) {
-            ui.updateReindex(d);
-            setTimeout(poll, 300);
-          } else {
-            resolve();
-          }
-        }).catch(() => setTimeout(poll, 500));
-      }
-      poll();
-    });
+    await pollUntil(
+      "/api/index-status",
+      d => !d.active,
+      d => { if (d.active) ui.updateReindex(d); }
+    );
 
-    // ── All done — poll until log_complete, then show full report ───────
+    // ── Phase 3: wait for the final sync log to be complete ──────────
     resetFooter();
     sta.textContent = "Synced just now";
     logBtn.hidden   = false;
-
-    const log = await new Promise(resolve => {
-      function poll() {
-        fetch("/api/sync-log").then(r => r.json()).then(d => {
-          if (d && d.log_complete === true) {
-            resolve(d);
-          } else {
-            setTimeout(poll, 300);
-          }
-        }).catch(() => setTimeout(poll, 500));
-      }
-      setTimeout(poll, 300);
-    });
+    const log = await pollUntil(
+      "/api/sync-log",
+      d => d && d.log_complete === true,
+      null
+    );
 
     // keepLive=true: exporter output stays visible above the phase cards
     ui.showReport(log, true);
-
-    // Done button: user confirms, THEN the note list refreshes
     doneBtn.onclick = () => {
       document.getElementById("syncLogOverlay").classList.remove("open");
       loadFolders().then(loadTags).then(() => {
@@ -3338,12 +3364,7 @@ async function runSync(resetSync = false) {
     };
 
   } catch (e) {
-    resetFooter();
-    sta.textContent = "Sync error";
-    ui.showError(e.message || "Unexpected error");
-    doneBtn.onclick = () => {
-      document.getElementById("syncLogOverlay").classList.remove("open");
-    };
+    failAndClose(e.message || "Unexpected error");
   }
 }
 
@@ -3417,6 +3438,10 @@ async function init() {
     }
     if (st.active) await waitForStartupIndex();
   } catch { /* server not ready yet — proceed anyway */ }
+
+  // Sync the sort toggle UI to the persisted sortMode before any list renders.
+  // loadTags() handles the same for attachFilter via its initial pill HTML.
+  applySortToggleUi();
 
   await loadFolders();
   await loadTags();
