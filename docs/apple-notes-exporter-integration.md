@@ -1,4 +1,12 @@
-# Plan: Integrate apple-notes-exporter CLI
+# Archived Plan: Integrate apple-notes-exporter CLI
+
+> **ARCHIVED — historical v2.0 planning document.** This file records the
+> original Falcon Notes Exporter → `apple-notes-exporter` migration plan and is
+> not a current operational guide. Several details below are intentionally
+> superseded by the shipped app, including Recently Deleted handling, filename
+> scheme detection, sync-report behavior, and capped indexing reads. Use
+> [README.md](../README.md), [ARCHITECTURE.md](ARCHITECTURE.md), and
+> [API.md](API.md) for current v3.0 behavior.
 
 ## Context
 

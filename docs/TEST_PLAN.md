@@ -126,11 +126,12 @@ investigate before continuing — later items often depend on earlier state.
 ### 11. Settings — change path
 - [ ] In Settings, type a real folder path → **Save & Index Notes** →
       indexing runs, auto-returns to the viewer
-- [ ] **Stale-path case:** in Settings, type a deliberately-wrong path
+- [ ] **Invalid-path case:** in Settings, type a deliberately-wrong path
       (e.g. `/tmp/does-not-exist`) → **Save** — error shown, no index
-      starts
-- [ ] Close and reopen Settings — the stale wrong path is shown
-      (`configured_root` fallback)
+      starts, and the existing saved config is not overwritten
+- [ ] **Stale-config case:** before launch, put a missing path in
+      `config.json` → start the server → Settings opens with that stale path
+      shown (`configured_root` fallback)
 - [ ] Type the correct path back → **Save** — works again
 
 ### 12. ↻ Sync (macOS only)
@@ -220,7 +221,7 @@ applicable.)*
 - Image-only "Saved Photo" notes render correctly
 - No new browser-console errors during normal use
 
-When all green: tag `v3.0.0-flashed`, merge `dev → main`, push tag.
+When all green: tag `v3.0.0`, merge `dev → main`, push tag.
 
 ## Known limitations not in scope for 3.0
 

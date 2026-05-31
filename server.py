@@ -1582,11 +1582,15 @@ class Handler(BaseHTTPRequestHandler):
             if notes_root is None:
                 self.send_error(503); return
             rel = unquote(path[8:])
-            if ".." not in rel:
-                fp = notes_root / rel
-                if fp.is_file():
-                    self._file(fp, MIME.get(fp.suffix.lower(), "application/octet-stream"))
-                    return
+            try:
+                root_abs = notes_root.resolve()
+                fp = (notes_root / rel).resolve()
+                fp.relative_to(root_abs)
+            except Exception:
+                self.send_error(404); return
+            if fp.is_file():
+                self._file(fp, MIME.get(fp.suffix.lower(), "application/octet-stream"))
+                return
             self.send_error(404)
 
         else:

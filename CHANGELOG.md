@@ -1,6 +1,6 @@
 # Changelog
 
-## [3.0.0] Unreleased
+## [3.0.0] 01-06-2026
 
 Major release — code-quality, performance, accessibility and documentation pass on
 top of v2.7.0. No user-facing behaviour regressions; UX additions are explicitly
@@ -64,8 +64,8 @@ section.
   the partial log is marked complete with a warning, instead of leaking forever.
 - **`fmtSize(0)` no longer renders "0 B"** — empty notes show a blank size badge
   instead of a literal zero.
-- **Modal focus management** — opening About, Sync Report, or PDF preview now
-  moves keyboard focus into the modal and traps Tab cycling inside until close.
+- **Modal focus management** — opening About or Sync Report now moves keyboard
+  focus into the modal; PDF preview remains keyboard-closeable via Escape.
 
 ### Documentation
 
@@ -77,10 +77,18 @@ section.
   command line; "Never do" list adds the empty-`<h1>` image guard.
 - **README features list** — adds the Sync Log button and Force Full Re-export
   sidebar entry (both shipped in v2.6 but missing from the feature list).
+- **Pre-merge documentation accuracy pass** — clarifies the capped search corpus,
+  setup commands, `sync.sh` filename-scheme limitation, API response wording,
+  and focus-management limitations; marks the old exporter-integration plan as
+  archived historical context.
 
 ---
 
 ## [2.7.0] 22-05-2026
+
+> Note: the v2.6.0 work was developed on `dev` and folded into the v2.7.0
+> release section below instead of being released as a separate dated changelog
+> entry.
 
 ### Fixed
 

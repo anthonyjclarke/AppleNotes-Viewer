@@ -212,5 +212,6 @@ button in the sidebar footer re-opens the latest report at any time.
 - Theme is `data-theme="dark|light"` on `<html>`. Selectors use the
   attribute to override CSS variables in the dark block.
 - Toggle controls use `aria-pressed` and `:focus-visible` outlines.
-- Modals trap focus on open via `setTimeout(() => element.focus(), 0)`
-  with `tabindex="-1"` on the focus target.
+- Modals move focus to their title on open via
+  `setTimeout(() => element.focus(), 0)` with `tabindex="-1"` on the focus
+  target. They do not currently fence Tab cycling inside the modal.

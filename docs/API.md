@@ -42,14 +42,15 @@ The client caches this response by `(folder, index_version)` to skip
 redundant fetches across folder switches.
 
 ### `/api/search?q=<query>&folder=<folder>`
-Substring search over title + body of every note in `folder` (or all
-notes when `folder=__all__`). Case-insensitive. `q` must be ≥ 2 chars or
-all notes in the pool are returned.
+Substring search over title + indexed body text for every note in `folder`
+(or all notes when `folder=__all__`). Case-insensitive. The indexed body
+text is capped at the first 8 KB extracted from each note during indexing.
+`q` must be ≥ 2 chars or all notes in the pool are returned.
 
 Response shape identical to `/api/notes`.
 
 ### `/api/note?file=<relpath>`
-Returns the raw HTML body of one note. `relpath` is the full
+Returns the raw exported HTML document for one note. `relpath` is the full
 `Account/Folder/Title.html` path (URL-encoded). Returns 404 if the path is
 unknown, contains `..`, or doesn't match a note in the live index.
 

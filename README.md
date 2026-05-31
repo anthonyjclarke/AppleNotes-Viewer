@@ -1,6 +1,14 @@
 # Apple Notes Viewer
 
-A local web app for browsing and searching your Apple Notes exports. Runs entirely on your machine — no cloud, no accounts, no runtime dependencies beyond Python 3.
+[![Release](https://img.shields.io/badge/release-v3.0.0-ff9b2e?style=flat-square)](https://github.com/anthonyjclarke/AppleNotes-Viewer/releases)
+[![License](https://img.shields.io/badge/license-MIT-8a8f99?style=flat-square)](LICENSE)
+[![Last commit](https://img.shields.io/github/last-commit/anthonyjclarke/AppleNotes-Viewer?color=5fb7d6&style=flat-square)](https://github.com/anthonyjclarke/AppleNotes-Viewer/commits)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-3ddc7a?style=flat-square&logo=apple&logoColor=white)](#platform-support)
+[![Runtime](https://img.shields.io/badge/runtime-Python%203-3776ab?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
+[![Dependencies](https://img.shields.io/badge/dependencies-stdlib%20only-6e7781?style=flat-square)](#how-it-works)
+[![Open Source](https://img.shields.io/badge/open%20source-yes-2ea44f?style=flat-square)](LICENSE)
+
+An open-source local web app for browsing and searching your Apple Notes exports. Runs entirely on your machine — no cloud, no accounts, no runtime dependencies beyond Python 3.
 
 > **v3.0.0** — Built around [`apple-notes-exporter`](https://github.com/kzaremski/apple-notes-exporter). See [CHANGELOG.md](CHANGELOG.md) for what changed. Internals: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · API: [docs/API.md](docs/API.md) · Tests: [docs/TEST_PLAN.md](docs/TEST_PLAN.md).
 
@@ -13,7 +21,7 @@ A local web app for browsing and searching your Apple Notes exports. Runs entire
 ## Features
 
 - **Three-column layout** — sidebar, note list, and content pane; mirrors the Apple Notes desktop experience
-- **Full-text search** — searches complete note body text, not just visible snippets; results highlighted as you type
+- **Full-text search** — searches titles plus indexed body text, not just visible snippets; for performance the searchable body is capped to the first 8 KB of extracted text per note
 - **Folder navigation** — browse a single Apple Notes folder or search across all notes with one click
 - **Tag pills** — detects `#hashtags` from note text and filenames, matching Apple Notes exactly (including digit-first tags like `#10SmallSt` and short tags like `#AI`); displayed as clickable pill chips
 - **Sort by date or size** — notes sorted newest-edited first by default; a toggle in the list panel switches to largest-first, with size-bucket group headers; each note shows a compact file-size badge colour-coded by tier (amber ≥ 1 MB, red ≥ 5 MB); preference persists across reloads
@@ -108,8 +116,8 @@ You no longer have to manage this by hand: **↻ Sync auto-detects the existing 
 ### 3. Clone the repo
 
 ```bash
-git clone https://github.com/anthonyjclarke/apple-notes-viewer.git
-cd apple-notes-viewer
+git clone https://github.com/anthonyjclarke/AppleNotes-Viewer.git
+cd AppleNotes-Viewer
 ```
 
 ### 4. Launch
@@ -130,7 +138,9 @@ To stop the server, close the Terminal window.
 notes-export export --format html --incremental --verbose --output <your folder>
 ```
 
-The `--incremental` flag reads `AppleNotesExportSyncWatermark.json`, which records every exported note's path and modification date. Only notes that are new or changed since the last run are re-exported, so repeated syncs stay fast even with thousands of notes. After the export completes, the app re-indexes and the note list refreshes automatically. Sync automatically appends `--add-date-prefix --date-format iso` when it detects the existing files use a date prefix, so it stays consistent with your initial export (see [Filename scheme](#filename-scheme)).
+The `--incremental` flag reads `AppleNotesExportSyncWatermark.json`, which records every exported note's path and modification date. Only notes that are new or changed since the last run are re-exported, so repeated syncs stay fast even with thousands of notes. After the export completes, the app re-indexes and the note list refreshes automatically. In-app Sync automatically appends `--add-date-prefix --date-format iso` when it detects the existing files use a date prefix, so it stays consistent with your initial export (see [Filename scheme](#filename-scheme)).
+
+> `sync.sh` is a lower-level helper for no-prefix exports. It does **not** auto-detect date-prefixed folders; use the in-app **↻ Sync** button for scheme-matching syncs.
 
 **Replaced-image cleanup.** `apple-notes-exporter` is *additive* — if you shrink a note by swapping a large embedded image for a smaller screenshot, it writes the new attachment but leaves the original file orphaned in the note's `(Attachments)/` folder (it has no clean/prune option). After each Sync the app automatically removes attachment files a note no longer references. It also removes empty `(Attachments)` folders — the exporter creates these for every note and touches them on every incremental run even when nothing changed, which would otherwise make them show today's date in Finder. It is conservative by design: if anything about a folder is ambiguous it leaves that folder alone, never deleting note text or unrelated files. What was reclaimed is shown in the Sync Report.
 
@@ -169,8 +179,8 @@ Transfer the entire export folder from your Mac to your Windows machine — USB 
 ### 3. Clone or copy the app files
 
 ```bat
-git clone https://github.com/anthonyjclarke/apple-notes-viewer.git
-cd apple-notes-viewer
+git clone https://github.com/anthonyjclarke/AppleNotes-Viewer.git
+cd AppleNotes-Viewer
 ```
 
 Or download and extract the ZIP from GitHub if git is not installed.
@@ -189,7 +199,7 @@ The **↻ Sync** button is not available on Windows — `apple-notes-exporter` r
 
 To get updated notes on Windows:
 
-1. On your Mac, click **↻ Sync** in the app (or run `bash sync.sh` in Terminal).
+1. On your Mac, click **↻ Sync** in the app. If you know your export uses the default no-prefix filename scheme, `bash sync.sh` is also available as a lower-level helper.
 2. Copy the updated export folder to Windows using the same method as the initial transfer.
 3. The app re-indexes automatically on next launch, or click the gear icon → **Save & Index Notes** to re-index immediately without restarting. (If you only want to check the configured path, click **← Back** to return without re-indexing.)
 
@@ -315,7 +325,7 @@ Avoid running it for trivial reasons — it re-exports every note and can take s
 
 ## How it works
 
-`server.py` is a zero-dependency Python HTTP server. On startup it binds immediately and kicks off indexing in a background thread — the browser opens right away and shows a loading screen until the index is ready. The index holds note titles, body text, hashtags, dates, and folder paths in memory for the session. Nothing is written to disk at runtime beyond `config.json`, which stores your chosen Notes folder path.
+`server.py` is a zero-dependency Python HTTP server. On startup it binds immediately and kicks off indexing in a background thread — the browser opens right away and shows a loading screen until the index is ready. The index holds note titles, indexed body text, hashtags, dates, and folder paths in memory for the session. Ordinary browsing is read-only; Settings writes `config.json`, Sync writes exporter output and the watermark, and viewer-side removal deletes the selected exported note file and matching attachments folder.
 
 `app.html` is a single-file SPA that fetches from the server's JSON API and renders everything. No build step, no framework, no npm.
 
@@ -342,4 +352,4 @@ Avoid running it for trivial reasons — it re-exports every note and can take s
 
 ## License
 
-MIT
+Open-source under the [MIT License](LICENSE).
